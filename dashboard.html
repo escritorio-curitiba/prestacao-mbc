@@ -420,6 +420,10 @@ hr{border:none;border-top:1px solid var(--bdr);margin:18px 0}
     <div style="height:220px"><canvas id="chart-bat-trend"></canvas></div>
   </div>
 
+  <!-- Mini-cards per zone -->
+  <div class="section-title" id="bat-cards-title">Batismos por Zona</div>
+  <div id="bat-zone-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px"></div>
+
   <!-- Bar chart by zone -->
   <div class="chart-card" style="margin-bottom:14px">
     <div style="height:200px"><canvas id="chart-batismo-zona"></canvas></div>
@@ -1229,6 +1233,78 @@ function renderBaptisms(){
            border:{display:false}}
       }
     }
+  });
+
+  // ── Mini-cards per zone ──────────────────────────────────────────
+  const grpKey = bz!=="all"||bd!=="all"||bs!=="all" ? "Área de Ensino" : "Zona";
+  const grpLabel = bz!=="all"||bd!=="all"||bs!=="all" ? "Batismos por Área" : "Batismos por Zona";
+  document.getElementById("bat-cards-title").textContent = grpLabel;
+
+  const cardGroups=[...new Set(hist.map(r=>r[grpKey]).filter(Boolean))].sort();
+  const cardMks=[...new Set(hist.map(r=>r._mk).filter(Boolean))].sort().slice(-6);
+  const cardLbls=cardMks.map(mk=>{
+    const p=mk.split("-"); return`${MONTH_PT[+p[1]-1].slice(0,3)}/${p[0].slice(2)}`;
+  });
+
+  const batCards=document.getElementById("bat-zone-cards");
+  batCards.innerHTML="";
+  // destroy old charts
+  Object.keys(APP.charts).filter(k=>k.startsWith("batCard")).forEach(k=>{APP.charts[k].destroy();delete APP.charts[k];});
+
+  cardGroups.forEach((g,gi)=>{
+    const vals=cardMks.map(mk=>Math.round(hist.filter(r=>r[grpKey]===g&&r._mk===mk).reduce((s,r)=>s+getNum(r,"Batismos"),0)));
+    const validVals=vals.filter(v=>v>0);
+    const avg=validVals.length?Math.round(validVals.reduce((a,b)=>a+b,0)/validVals.length):0;
+    const trend=vals.length>=2?vals[vals.length-1]-vals[vals.length-2]:0;
+    const trendTxt=trend>0?`▲ +${trend}`:trend<0?`▼ ${trend}`:"→";
+    const trendCol=trend>0?"#16a34a":trend<0?"#dc2626":"#64748b";
+    const color=ZONE_PALETTE[gi%ZONE_PALETTE.length];
+
+    const card=document.createElement("div");
+    card.className="chart-card";
+    card.innerHTML=`
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px">
+        <h4 style="text-transform:none;font-size:.78rem;color:#1e293b;font-weight:700">${g}</h4>
+        <span style="font-size:.72rem;font-weight:700;color:${trendCol}">${trendTxt}</span>
+      </div>
+      <div class="chart-val" style="font-size:1.2rem;margin-bottom:6px">${fmt(avg)} <span style="font-size:.72rem;font-weight:500;color:#64748b">média/mês</span></div>
+      <div style="height:110px"><canvas id="bat-card-${gi}"></canvas></div>`;
+    batCards.appendChild(card);
+
+    setTimeout(()=>{
+      const c=document.getElementById(`bat-card-${gi}`);
+      if(!c)return;
+      if(APP.charts[`batCard${gi}`])APP.charts[`batCard${gi}`].destroy();
+      APP.charts[`batCard${gi}`]=new Chart(c,{
+        type:"line",
+        plugins:[ChartDataLabels],
+        data:{labels:cardLbls,datasets:[{
+          data:vals,
+          borderColor:color,backgroundColor:color+"14",
+          fill:true,borderWidth:2,pointRadius:5,
+          pointBackgroundColor:color,spanGaps:true,tension:.35
+        }]},
+        options:{
+          responsive:true,maintainAspectRatio:false,
+          plugins:{
+            legend:{display:false},
+            tooltip:{callbacks:{label:i=>`${i.raw} batismos`}},
+            datalabels:{
+              display:true,color:color,
+              font:{size:9,weight:"700"},
+              formatter:v=>v!=null?v:"",
+              anchor:"end",align:"top",offset:2,clip:false
+            }
+          },
+          scales:{
+            x:{grid:{display:false},ticks:{font:{size:8},color:"#94a3b8",maxRotation:0}},
+            y:{beginAtZero:true,grid:{color:"#f1f5f9"},
+               ticks:{font:{size:8},color:"#94a3b8"},border:{display:false}}
+          },
+          animation:{duration:200}
+        }
+      });
+    },0);
   });
 
   // Bar chart
