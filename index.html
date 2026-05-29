@@ -606,6 +606,9 @@ async function loadData(){
       if(!d){row._valid=false;return;}
       row._valid=true;
       row._date=d;
+      // Normalize old zone names to current names
+      if(row["Zona"]==="São Lourenço/Curitiba") row["Zona"]="São Lourenço";
+      if(row["Zona"]==="Curitiba")              row["Zona"]="São Lourenço";
       row._year=d.getFullYear();
       row._month=d.getMonth()+1;
       row._mk=monthKey(d);
@@ -754,6 +757,8 @@ function applyFilters(){
 
   renderActiveTab();
   syncTableFilters();
+  // Refresh period-sensitive tabs even if not active
+  if(document.getElementById("tab-sac").classList.contains("active")) renderSacramental();
   syncTrendFilters();
   syncBaptismFilters();
 }
@@ -1410,6 +1415,18 @@ async function runAI(){
   btn.disabled=false;btn.textContent="Gerar Análise Detalhada com IA";
 }
 
+/* ── Helper: data filtered only by date (no entity filters) ─────── */
+function getDateBase(){
+  if(APP.dr&&APP.dr.active&&APP.dr.start&&APP.dr.end){
+    return APP.raw.filter(r=>r._date&&r._date>=APP.dr.start&&r._date<=APP.dr.end);
+  }
+  const yr=parseInt(document.getElementById("sel-year").value);
+  const mo=parseInt(document.getElementById("sel-month").value);
+  if(APP.periodType==="mensal") return APP.raw.filter(r=>r._year===yr&&r._month===mo);
+  const wk=document.getElementById("sel-week").value;
+  return APP.raw.filter(r=>r._wk===wk);
+}
+
 /* ══════════════════════════════════════════════════════════════════
    SACRAMENTAL — FREQUÊNCIA REUNIÃO SACRAMENTAL
 ══════════════════════════════════════════════════════════════════ */
@@ -1495,13 +1512,14 @@ function renderSacramental(){
   const stk  = document.getElementById("sac-estaca").value||"all";
   const area = document.getElementById("sac-area").value||"all";
 
-  let base = APP.raw.filter(r=>r["Frequência"]>0);
+  // Use date-filtered base (respects main period + custom date range)
+  let base = getDateBase().filter(r=>r["Frequência"]>0);
   if(zona!=="all") base=base.filter(r=>r["Zona"]===zona);
   if(dist!=="all") base=base.filter(r=>getDistrito(r["Área de Ensino"])===dist);
   if(stk !=="all") base=base.filter(r=>r["Estaca"]===stk);
   if(area!=="all") base=base.filter(r=>r["Área de Ensino"]===area);
 
-  const allWeeks=[...new Set(base.map(r=>r._wk).filter(Boolean))].sort().slice(-nw);
+  const allWeeks=[...new Set(base.map(r=>r._wk).filter(Boolean))].sort();
   const wkLabels=allWeeks.map(w=>{
     const p=w.split("-"); const d=new Date(+p[0],+p[1]-1,+p[2]);
     return`${d.getDate()} ${MONTH_PT[d.getMonth()].slice(0,3)}`;
@@ -1526,18 +1544,21 @@ function renderSacramental(){
   // KPI cards
   const missionTotal=base.reduce((s,r)=>s+(r["Frequência"]||0),0);
   const missionAvgWeek=allWeeks.length?Math.round(missionTotal/allWeeks.length):0;
-  const topGroup=groups.sort((a,b)=>
-    allWeeks.reduce((s,w)=>s+(matrix[b][w]?.total||0),0)-
-    allWeeks.reduce((s,w)=>s+(matrix[a][w]?.total||0),0))[0]||"—";
+
+  // Group totals for top/bottom
+  const grpTotals=groups.map(g=>({g,tot:allWeeks.reduce((s,w)=>s+(matrix[g][w]?.total||0),0)}));
+  grpTotals.sort((a,b)=>b.tot-a.tot);
+  const topGroup  = grpTotals[0]||{g:"—",tot:0};
+  const botGroup  = grpTotals[grpTotals.length-1]||{g:"—",tot:0};
 
   document.getElementById("sac-kpi").innerHTML=[
-    {lbl:"Total no Período",val:fmt(missionTotal),sub:"pessoas presentes"},
-    {lbl:"Média por Semana",val:fmt(missionAvgWeek),sub:"pessoas/semana"},
-    {lbl:"Semanas analisadas",val:allWeeks.length,sub:`de ${fmt(groups.length)} ${byArea?"áreas":"zonas"}`},
-    {lbl:"Maior frequência",val:topGroup,sub:"grupo com mais presenças",small:true},
+    {lbl:"Total no Período",       val:fmt(missionTotal),            sub:"pessoas presentes"},
+    {lbl:"Média por Semana",       val:fmt(missionAvgWeek),          sub:"pessoas/semana"},
+    {lbl:"Maior Frequência",       val:topGroup.g,                   sub:fmt(topGroup.tot)+" pessoas no período",  small:true},
+    {lbl:"Menor Frequência",       val:botGroup.g,                   sub:fmt(botGroup.tot)+" pessoas no período",  small:true},
   ].map(k=>`<div class="kpi">
     <div class="kpi-label">${k.lbl}</div>
-    <div class="kpi-value" style="font-size:${k.small?"1.2rem":"1.85rem"}">${k.val}</div>
+    <div class="kpi-value" style="font-size:${k.small?"1.1rem":"1.85rem"}">${k.val}</div>
     <div class="kpi-goal">${k.sub}</div>
   </div>`).join("");
 
@@ -1547,6 +1568,7 @@ function renderSacramental(){
   const ctx=document.getElementById("sac-main-chart");
   APP.charts.sacMain=new Chart(ctx,{
     type:"line",
+    plugins:[ChartDataLabels],
     data:{
       labels:wkLabels,
       datasets:[{
@@ -1567,7 +1589,7 @@ function renderSacramental(){
         datalabels:{
           display:true,color:"#1e40af",
           font:{size:10,weight:"700"},
-          formatter:v=>fmt(v),
+          formatter:v=>v!=null?fmt(v):"",
           anchor:"end",align:"top",offset:4,clip:false
         }
       },
@@ -1834,6 +1856,8 @@ _drAttachListeners();
 document.getElementById("now-label").textContent=
   new Date().toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"});
 
+Chart.register(ChartDataLabels);
+Chart.defaults.plugins.datalabels.display=false; // off by default, enabled per-chart
 Chart.defaults.font.family="Inter,system-ui,sans-serif";
 Chart.defaults.color="#64748b";
 
