@@ -415,9 +415,14 @@ hr{border:none;border-top:1px solid var(--bdr);margin:18px 0}
       <select id="b-area" onchange="renderBaptisms()"></select>
     </div>
   </div>
+  <!-- Period total KPI -->
+  <div id="bat-period-kpi" style="margin-bottom:14px"></div>
+
   <!-- Trend line chart -->
   <div class="chart-card" style="margin-bottom:14px">
-    <div style="height:220px"><canvas id="chart-bat-trend"></canvas></div>
+    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
+                color:#64748b;padding:14px 16px 0" id="bat-trend-title">💧 Batismos por Mês</div>
+    <div style="height:220px;padding:0 4px 4px"><canvas id="chart-bat-trend"></canvas></div>
   </div>
 
   <!-- Mini-cards per zone -->
@@ -1218,6 +1223,27 @@ function renderBaptisms(){
   if(bs!=="all") fd=fd.filter(r=>r["Estaca"]===bs);
   if(ba!=="all") fd=fd.filter(r=>r["Área de Ensino"]===ba);
 
+  // ── Period total KPI ─────────────────────────────────────────────
+  const periodTotal=fd.reduce((s,r)=>s+getNum(r,"Batismos"),0);
+  const periodLabel=document.getElementById("caption").querySelector("strong")?.textContent||"Período";
+  const batGoalPeriod=getBaptismGoal(fd, nWeeks(fd));
+  const batPct=batGoalPeriod?Math.min(200,periodTotal/batGoalPeriod*100):0;
+  const batC=pcc(batPct);
+  document.getElementById("bat-period-kpi").innerHTML=`
+    <div class="kpi" style="--ac:#2563eb;padding:20px 24px">
+      <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#64748b;margin-bottom:6px">
+        💧 Total de Batismos — ${periodLabel}
+      </div>
+      <div style="font-size:3.2rem;font-weight:900;color:#1e293b;line-height:1">${fmt(periodTotal)}</div>
+      ${batGoalPeriod?`<div style="margin-top:10px">
+        <div style="background:#e2e8f0;height:6px;border-radius:3px;margin-bottom:5px">
+          <div style="width:${Math.min(100,batPct).toFixed(0)}%;height:6px;border-radius:3px;background:${batC}"></div>
+        </div>
+        <span style="font-size:.8rem;font-weight:700;color:${batC}">${batPct.toFixed(0)}% da meta</span>
+        <span style="font-size:.75rem;color:#94a3b8;margin-left:10px">meta ${fmt(batGoalPeriod)} batismos</span>
+      </div>`:""}
+    </div>`;
+
   // ── Trend line chart ─────────────────────────────────────────────
   // Use broader history (last 12 months) for the trend
   let hist=APP.raw.slice();
@@ -1290,6 +1316,8 @@ function renderBaptisms(){
     const vals=cardMks.map(mk=>Math.round(hist.filter(r=>r[grpKey]===g&&r._mk===mk).reduce((s,r)=>s+getNum(r,"Batismos"),0)));
     const validVals=vals.filter(v=>v>0);
     const avg=validVals.length?Math.round(validVals.reduce((a,b)=>a+b,0)/validVals.length):0;
+    // Period total from fd (date-filtered)
+    const periodGrpTotal=Math.round(fd.filter(r=>r[grpKey]===g).reduce((s,r)=>s+getNum(r,"Batismos"),0));
     const trend=vals.length>=2?vals[vals.length-1]-vals[vals.length-2]:0;
     const trendTxt=trend>0?`▲ +${trend}`:trend<0?`▼ ${trend}`:"→";
     const trendCol=trend>0?"#16a34a":trend<0?"#dc2626":"#64748b";
@@ -1311,8 +1339,13 @@ function renderBaptisms(){
           <span style="font-size:.72rem;font-weight:700;color:${trendCol}">${trendTxt}</span>
         </div>
       </div>
-      <div class="chart-val" style="font-size:1.2rem;margin-bottom:6px">${fmt(avg)} <span style="font-size:.72rem;font-weight:500;color:#64748b">média/mês</span></div>
-      <div style="height:110px"><canvas id="bat-card-${gi}"></canvas></div>`;
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px">
+        <div class="chart-val" style="font-size:1.6rem">${fmt(periodGrpTotal)}</div>
+        <span style="font-size:.72rem;color:#64748b">no período</span>
+        <span style="font-size:.72rem;color:#94a3b8">·</span>
+        <span style="font-size:.72rem;color:#94a3b8">${fmt(avg)}/mês (hist.)</span>
+      </div>
+      <div style="height:100px"><canvas id="bat-card-${gi}"></canvas></div>`;
     batCards.appendChild(card);
 
     setTimeout(()=>{
