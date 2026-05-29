@@ -418,13 +418,6 @@ hr{border:none;border-top:1px solid var(--bdr);margin:18px 0}
   <!-- Period total KPI -->
   <div id="bat-period-kpi" style="margin-bottom:14px"></div>
 
-  <!-- Trend line chart -->
-  <div class="chart-card" style="margin-bottom:14px">
-    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
-                color:#64748b;padding:14px 16px 0" id="bat-trend-title">💧 Batismos por Mês</div>
-    <div style="height:220px;padding:0 4px 4px"><canvas id="chart-bat-trend"></canvas></div>
-  </div>
-
   <!-- Mini-cards per zone -->
   <div class="section-title" id="bat-cards-title">Batismos por Zona</div>
   <div id="bat-zone-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px"></div>
@@ -434,6 +427,13 @@ hr{border:none;border-top:1px solid var(--bdr);margin:18px 0}
     <div style="height:200px"><canvas id="chart-batismo-zona"></canvas></div>
   </div>
   <div id="bap-list"></div>
+
+  <!-- Trend line chart — historical (bottom) -->
+  <div class="chart-card" style="margin-top:14px">
+    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
+                color:#64748b;padding:14px 16px 0">💧 Batismos por Mês</div>
+    <div style="height:220px;padding:0 4px 4px"><canvas id="chart-bat-trend"></canvas></div>
+  </div>
 </div>
 
 <!-- ══ TAB: RCM ══════════════════════════════════════════════════════ -->
