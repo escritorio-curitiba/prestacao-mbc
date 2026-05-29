@@ -1301,11 +1301,27 @@ function renderBaptisms(){
   const grpLabel = bz!=="all"||bd!=="all"||bs!=="all" ? "Batismos por Área" : "Batismos por Zona";
   document.getElementById("bat-cards-title").textContent = grpLabel;
 
+  // Use weeks when custom date range active, months otherwise
+  const useWeekly = !!(APP.dr && APP.dr.active && APP.dr.start && APP.dr.end);
   const cardGroups=[...new Set(hist.map(r=>r[grpKey]).filter(Boolean))].sort();
-  const cardMks=[...new Set(hist.map(r=>r._mk).filter(Boolean))].sort().slice(-6);
-  const cardLbls=cardMks.map(mk=>{
-    const p=mk.split("-"); return`${MONTH_PT[+p[1]-1].slice(0,3)}/${p[0].slice(2)}`;
-  });
+
+  let cardKeys, cardLbls, cardBase;
+  if(useWeekly){
+    // Use fd (date-filtered) for weekly cards
+    cardBase = fd;
+    cardKeys = [...new Set(fd.map(r=>r._wk).filter(Boolean))].sort();
+    cardLbls = cardKeys.map(w=>{
+      const p=w.split("-"); const d=new Date(+p[0],+p[1]-1,+p[2]);
+      return`${d.getDate()} ${MONTH_PT[d.getMonth()].slice(0,3)}`;
+    });
+  } else {
+    cardBase = hist;
+    cardKeys = [...new Set(hist.map(r=>r._mk).filter(Boolean))].sort().slice(-6);
+    cardLbls = cardKeys.map(mk=>{
+      const p=mk.split("-"); return`${MONTH_PT[+p[1]-1].slice(0,3)}/${p[0].slice(2)}`;
+    });
+  }
+  const cardMks = cardKeys; // alias for compatibility
 
   const batCards=document.getElementById("bat-zone-cards");
   batCards.innerHTML="";
@@ -1313,7 +1329,10 @@ function renderBaptisms(){
   Object.keys(APP.charts).filter(k=>k.startsWith("batCard")).forEach(k=>{APP.charts[k].destroy();delete APP.charts[k];});
 
   cardGroups.forEach((g,gi)=>{
-    const vals=cardMks.map(mk=>Math.round(hist.filter(r=>r[grpKey]===g&&r._mk===mk).reduce((s,r)=>s+getNum(r,"Batismos"),0)));
+    const timeKey = useWeekly ? "_wk" : "_mk";
+    const vals=cardMks.map(k=>Math.round(
+      cardBase.filter(r=>r[grpKey]===g&&r[timeKey]===k).reduce((s,r)=>s+getNum(r,"Batismos"),0)
+    ));
     const validVals=vals.filter(v=>v>0);
     const avg=validVals.length?Math.round(validVals.reduce((a,b)=>a+b,0)/validVals.length):0;
     // Period total from fd (date-filtered)
@@ -1343,7 +1362,7 @@ function renderBaptisms(){
         <div class="chart-val" style="font-size:1.6rem">${fmt(periodGrpTotal)}</div>
         <span style="font-size:.72rem;color:#64748b">no período</span>
         <span style="font-size:.72rem;color:#94a3b8">·</span>
-        <span style="font-size:.72rem;color:#94a3b8">${fmt(avg)}/mês (hist.)</span>
+        <span style="font-size:.72rem;color:#94a3b8">${fmt(avg)}/${useWeekly?"sem":"mês"} (méd.)</span>
       </div>
       <div style="height:100px"><canvas id="bat-card-${gi}"></canvas></div>`;
     batCards.appendChild(card);
