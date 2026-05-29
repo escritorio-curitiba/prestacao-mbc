@@ -400,7 +400,11 @@ hr{border:none;border-top:1px solid var(--bdr);margin:18px 0}
   <div class="filters" style="margin-bottom:14px">
     <div class="filter-group">
       <label>Zona</label>
-      <select id="b-zona" onchange="renderBaptisms()"></select>
+      <select id="b-zona" onchange="onBaptismZoneChange()"></select>
+    </div>
+    <div class="filter-group">
+      <label>Distrito</label>
+      <select id="b-distrito" onchange="onBaptismDistritoChange()"></select>
     </div>
     <div class="filter-group">
       <label>Estaca</label>
@@ -1109,10 +1113,40 @@ function syncBaptismFilters(){
     bz.innerHTML=zones.map(z=>`<option value="${z}">${z==="all"?"Toda a Missão":z}</option>`).join("");
   }
 }
+function onBaptismZoneChange(){
+  const bz=document.getElementById("b-zona").value||"all";
+  const rows=bz==="all"?APP.filtered:APP.filtered.filter(r=>r["Zona"]===bz);
+  // Update distrito
+  const dists=["all",...new Set(rows.map(r=>getDistrito(r["Área de Ensino"])).filter(Boolean))].sort((a,b)=>a==="all"?-1:b==="all"?1:a.localeCompare(b));
+  const bd=document.getElementById("b-distrito");
+  bd.innerHTML=dists.map(d=>`<option value="${d}">${d==="all"?"Todos os Distritos":d}</option>`).join("");
+  // Update estaca
+  const stks=["all",...new Set(rows.map(r=>r["Estaca"]).filter(Boolean))].sort();
+  document.getElementById("b-estaca").innerHTML=stks.map(s=>`<option value="${s}">${s==="all"?"Todas as Estacas":s}</option>`).join("");
+  // Update area
+  const areas=["all",...new Set(rows.map(r=>r["Área de Ensino"]).filter(Boolean))].sort();
+  document.getElementById("b-area").innerHTML=areas.map(a=>`<option value="${a}">${a==="all"?"Todas as Áreas":a}</option>`).join("");
+  renderBaptisms();
+}
+
+function onBaptismDistritoChange(){
+  const bz=document.getElementById("b-zona").value||"all";
+  const bd=document.getElementById("b-distrito").value||"all";
+  let rows=bz==="all"?APP.filtered:APP.filtered.filter(r=>r["Zona"]===bz);
+  if(bd!=="all") rows=rows.filter(r=>getDistrito(r["Área de Ensino"])===bd);
+  const stks=["all",...new Set(rows.map(r=>r["Estaca"]).filter(Boolean))].sort();
+  document.getElementById("b-estaca").innerHTML=stks.map(s=>`<option value="${s}">${s==="all"?"Todas as Estacas":s}</option>`).join("");
+  const areas=["all",...new Set(rows.map(r=>r["Área de Ensino"]).filter(Boolean))].sort();
+  document.getElementById("b-area").innerHTML=areas.map(a=>`<option value="${a}">${a==="all"?"Todas as Áreas":a}</option>`).join("");
+  renderBaptisms();
+}
+
 function onBaptismStakeChange(){
   const bz=document.getElementById("b-zona").value||"all";
+  const bd=document.getElementById("b-distrito").value||"all";
   const bs=document.getElementById("b-estaca").value||"all";
-  const rows=bz==="all"?APP.filtered:APP.filtered.filter(r=>r["Zona"]===bz);
+  let rows=bz==="all"?APP.filtered:APP.filtered.filter(r=>r["Zona"]===bz);
+  if(bd!=="all") rows=rows.filter(r=>getDistrito(r["Área de Ensino"])===bd);
   const rows2=bs==="all"?rows:rows.filter(r=>r["Estaca"]===bs);
   const areas=["all",...new Set(rows2.map(r=>r["Área de Ensino"]).filter(Boolean))].sort();
   document.getElementById("b-area").innerHTML=
@@ -1123,18 +1157,21 @@ function onBaptismStakeChange(){
 function renderBaptisms(){
   if(!document.getElementById("tab-batismos").classList.contains("active"))return;
   const bz=document.getElementById("b-zona").value||"all";
+  const bd=document.getElementById("b-distrito").value||"all";
   const bs=document.getElementById("b-estaca").value||"all";
   const ba=document.getElementById("b-area").value||"all";
 
-  // Sync estaca
-  const zrows=bz==="all"?APP.filtered:APP.filtered.filter(r=>r["Zona"]===bz);
-  const stks=["all",...new Set(zrows.map(r=>r["Estaca"]).filter(Boolean))].sort();
-  const bse=document.getElementById("b-estaca");
-  const cstk=bse.value;
-  bse.innerHTML=stks.map(s=>`<option value="${s}"${s===cstk?" selected":""}>${s==="all"?"Todas as Estacas":s}</option>`).join("");
+  // Init distrito if empty
+  const bdEl=document.getElementById("b-distrito");
+  if(!bdEl.options.length){
+    const rows=bz==="all"?APP.filtered:APP.filtered.filter(r=>r["Zona"]===bz);
+    const dists=["all",...new Set(rows.map(r=>getDistrito(r["Área de Ensino"])).filter(Boolean))].sort((a,b)=>a==="all"?-1:b==="all"?1:a.localeCompare(b));
+    bdEl.innerHTML=dists.map(d=>`<option value="${d}">${d==="all"?"Todos os Distritos":d}</option>`).join("");
+  }
 
   let fd=APP.filtered.slice();
   if(bz!=="all") fd=fd.filter(r=>r["Zona"]===bz);
+  if(bd!=="all") fd=fd.filter(r=>getDistrito(r["Área de Ensino"])===bd);
   if(bs!=="all") fd=fd.filter(r=>r["Estaca"]===bs);
   if(ba!=="all") fd=fd.filter(r=>r["Área de Ensino"]===ba);
 
