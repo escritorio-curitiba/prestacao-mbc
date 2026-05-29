@@ -411,6 +411,12 @@ hr{border:none;border-top:1px solid var(--bdr);margin:18px 0}
       <select id="b-area" onchange="renderBaptisms()"></select>
     </div>
   </div>
+  <!-- Trend line chart -->
+  <div class="chart-card" style="margin-bottom:14px">
+    <div style="height:220px"><canvas id="chart-bat-trend"></canvas></div>
+  </div>
+
+  <!-- Bar chart by zone -->
   <div class="chart-card" style="margin-bottom:14px">
     <div style="height:200px"><canvas id="chart-batismo-zona"></canvas></div>
   </div>
@@ -1131,6 +1137,58 @@ function renderBaptisms(){
   if(bz!=="all") fd=fd.filter(r=>r["Zona"]===bz);
   if(bs!=="all") fd=fd.filter(r=>r["Estaca"]===bs);
   if(ba!=="all") fd=fd.filter(r=>r["Área de Ensino"]===ba);
+
+  // ── Trend line chart ─────────────────────────────────────────────
+  // Use broader history (last 12 months) for the trend
+  let hist=APP.raw.slice();
+  if(bz!=="all") hist=hist.filter(r=>r["Zona"]===bz);
+  if(bs!=="all") hist=hist.filter(r=>r["Estaca"]===bs);
+  if(ba!=="all") hist=hist.filter(r=>r["Área de Ensino"]===ba);
+
+  const allMks=[...new Set(hist.map(r=>r._mk).filter(Boolean))].sort().slice(-12);
+  const trendVals=allMks.map(mk=>Math.round(hist.filter(r=>r._mk===mk).reduce((s,r)=>s+getNum(r,"Batismos"),0)));
+  const trendLbls=allMks.map(mk=>{
+    const p=mk.split("-"); return`${MONTH_PT[+p[1]-1].slice(0,3)}/${p[0].slice(2)}`;
+  });
+
+  if(APP.charts.batTrend)APP.charts.batTrend.destroy();
+  const tctx=document.getElementById("chart-bat-trend");
+  APP.charts.batTrend=new Chart(tctx,{
+    type:"line",
+    plugins:[ChartDataLabels],
+    data:{
+      labels:trendLbls,
+      datasets:[{
+        label:"Batismos",
+        data:trendVals,
+        borderColor:"#2563eb",
+        backgroundColor:"rgba(37,99,235,.08)",
+        fill:true,borderWidth:2.5,
+        pointRadius:5,pointBackgroundColor:"#2563eb",
+        pointHoverRadius:7,tension:.35,
+        spanGaps:true,
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:i=>`${i.raw} batismos`}},
+        datalabels:{
+          display:true,color:"#1e40af",
+          font:{size:10,weight:"700"},
+          formatter:v=>v!=null?v:"",
+          anchor:"end",align:"top",offset:4,clip:false,
+        }
+      },
+      scales:{
+        x:{grid:{display:false},ticks:{font:{size:10},color:"#94a3b8"}},
+        y:{beginAtZero:true,grid:{color:"#f1f5f9"},
+           ticks:{font:{size:10},color:"#94a3b8"},
+           border:{display:false}}
+      }
+    }
+  });
 
   // Bar chart
   const zoneAgg={};
