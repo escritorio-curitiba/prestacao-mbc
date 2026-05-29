@@ -513,10 +513,39 @@ hr{border:none;border-top:1px solid var(--bdr);margin:18px 0}
 const SHEET_ID   = "1-H8JUnd_I05yZp0gowwqgT0Jleev87db0lLgi7hitxU";
 const SHEET_NAME = "FormResponsesB";
 
+// Weekly per-companionship standards (official MBC)
 const EXCELLENCE = {
-  "Batismos":0.5,"Datas Marcadas":3,"Convites":6,
-  "Igreja":5,"Igreja RCs":3,"Contatos":120,"Novos":10,"Lições c/ Membro":3
+  "Batismos":0.5,        // fallback only — use getBaptismGoal() for zone-aware calc
+  "Datas Marcadas":3,
+  "Convites":6,
+  "Igreja":5,
+  "Igreja RCs":3,
+  "Contatos":120,        // 20/dia × 6 dias
+  "Novos":10,
+  "Lições c/ Membro":3
 };
+
+// Zone-specific monthly baptism goals (total por zona por mês)
+const ZONE_BAT_GOALS = {
+  "Curitiba":                  40,
+  "São Lourenço":              50,
+  "Iguaçú/Campo Comprido":     40,
+  "Tarumã/Pinhais":            40,
+  "Boa Vista/Colombo":         40,
+  "Ponta Grossa/Campos Gerais":50,
+  "Ponta Grossa Norte":        50,
+};
+
+// Baptism goal for a dataset over nw weeks (zone-aware)
+function getBaptismGoal(data, nw){
+  const zones=[...new Set(data.map(r=>r["Zona"]).filter(Boolean))];
+  const monthly=zones.reduce((s,z)=>s+(ZONE_BAT_GOALS[z]||0),0);
+  return Math.round(monthly*nw/4);
+}
+// Single-zone monthly goal scaled to nw weeks
+function getZoneBaptismGoal(zone, nw){
+  return Math.round((ZONE_BAT_GOALS[zone]||0)*nw/4);
+}
 const TABLE_COLS = ["Batismos","Datas Marcadas","Convites","Igreja",
                     "Igreja RCs","Novos","Contatos","Lições c/ Membro"];
 const ICONS = {
@@ -832,15 +861,17 @@ function renderKPIs(){
   const main=["Batismos","Datas Marcadas","Convites","Igreja","Igreja RCs","Contatos"];
   const sec =["Novos","Lições c/ Membro","Datas Mantidas","Frequência"];
 
+  const batGoal=getBaptismGoal(fd,nw);
   document.getElementById("kpi-main").innerHTML=
-    main.map((m,i)=>kpiCard(m,fd,na,nw,KPI_ACCENTS[i],false)).join("");
+    main.map((m,i)=>kpiCard(m,fd,na,nw,KPI_ACCENTS[i],false,
+      m==="Batismos"?batGoal:undefined)).join("");
   document.getElementById("kpi-sec").innerHTML=
     sec.map((m,i)=>kpiCard(m,fd,na,nw,ZONE_PALETTE[i+2],true)).join("");
 }
 
-function kpiCard(m,fd,na,nw,accent,sm){
+function kpiCard(m,fd,na,nw,accent,sm,goalOverride){
   const val=fd.reduce((s,r)=>s+getNum(r,m),0);
-  const goal=(EXCELLENCE[m]||0)*na*nw;
+  const goal=goalOverride!==undefined ? goalOverride : (EXCELLENCE[m]||0)*na*nw;
   const pct=goal?Math.min(200,val/goal*100):0;
   const c=goal?pcc(pct):"#94a3b8";
   const bw=Math.min(100,pct).toFixed(0);
@@ -869,7 +900,7 @@ function renderZoneCards(){
     const col=APP.zoneColors[z]||"#2563eb";
     const items=TABLE_COLS.map(m=>{
       const val=zd.reduce((s,r)=>s+getNum(r,m),0);
-      const goal=(EXCELLENCE[m]||0)*znw;
+      const goal=m==="Batismos" ? getZoneBaptismGoal(z,znw) : (EXCELLENCE[m]||0)*znw;
       const pct=goal?Math.min(200,val/goal*100):0;
       const c=goal?pcc(pct):"#94a3b8";
       const bw=Math.min(100,pct).toFixed(0);
@@ -972,8 +1003,13 @@ function buildTable(data,grp,nw_){
     TABLE_COLS.map(m=>`<th>${ICONS[m]||""} ${m}</th>`).join("")+`</tr>`;
   const body=rows.map(([name,vals])=>{
     const cells=TABLE_COLS.map(m=>{
-      const v=vals[m]||0;const std=EXCELLENCE[m]||0;
-      const p=std?v/(std*nw_)*100:0;
+      const v=vals[m]||0;
+      // For Batismos use zone-specific goal when grouping by Zona
+      let std;
+      if(m==="Batismos"&&grp==="Zona") std=getZoneBaptismGoal(name,nw_);
+      else if(m==="Batismos") std=getBaptismGoal(data.filter(r=>(r[grp]||"—")===name),nw_);
+      else std=(EXCELLENCE[m]||0)*nw_;
+      const p=std?v/std*100:0;
       const css=!std?"":v===0&&std>0?"cr":p>=80?"cg":p>=50?"cy":"cr";
       return`<td class="${css}">${fmt(v)}</td>`;
     }).join("");
@@ -981,10 +1017,9 @@ function buildTable(data,grp,nw_){
   }).join("");
   const foot=`<tfoot><tr><td><strong>TOTAL</strong></td>`+
     TABLE_COLS.map(m=>{
-      const v=totals[m];const std=(EXCELLENCE[m]||0)*rows.length;
-      const p=std?v/std*nw_*100:0; // hmm
-      // for total row, just color based on overall
-      const p2=std?(v/(std)*100):0;
+      const v=totals[m];
+      const std=m==="Batismos"?getBaptismGoal(data,nw_):(EXCELLENCE[m]||0)*rows.length*nw_;
+      const p2=std?(v/std*100):0;
       const css=!std?"":v===0?"cr":p2>=80?"cg":p2>=50?"cy":"cr";
       return`<td class="${css}"><strong>${fmt(v)}</strong></td>`;
     }).join("")+`</tr></tfoot>`;
