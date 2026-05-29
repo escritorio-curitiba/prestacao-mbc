@@ -1294,13 +1294,22 @@ function renderBaptisms(){
     const trendTxt=trend>0?`▲ +${trend}`:trend<0?`▼ ${trend}`:"→";
     const trendCol=trend>0?"#16a34a":trend<0?"#dc2626":"#64748b";
     const color=ZONE_PALETTE[gi%ZONE_PALETTE.length];
+    // Zone monthly goal (only meaningful when grouping by zone)
+    const zoneGoal = ZONE_BAT_GOALS[g];
+    const goalBadge = zoneGoal
+      ? `<span style="font-size:.7rem;font-weight:700;color:#64748b;background:#f1f5f9;
+           border-radius:4px;padding:2px 7px;margin-right:5px">Meta ${zoneGoal}/mês</span>`
+      : "";
 
     const card=document.createElement("div");
     card.className="chart-card";
     card.innerHTML=`
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px">
         <h4 style="text-transform:none;font-size:.78rem;color:#1e293b;font-weight:700">${g}</h4>
-        <span style="font-size:.72rem;font-weight:700;color:${trendCol}">${trendTxt}</span>
+        <div style="display:flex;align-items:center;gap:4px">
+          ${goalBadge}
+          <span style="font-size:.72rem;font-weight:700;color:${trendCol}">${trendTxt}</span>
+        </div>
       </div>
       <div class="chart-val" style="font-size:1.2rem;margin-bottom:6px">${fmt(avg)} <span style="font-size:.72rem;font-weight:500;color:#64748b">média/mês</span></div>
       <div style="height:110px"><canvas id="bat-card-${gi}"></canvas></div>`;
