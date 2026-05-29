@@ -616,9 +616,6 @@ async function loadData(){
       if(!d){row._valid=false;return;}
       row._valid=true;
       row._date=d;
-      // Normalize old zone names to current names
-      if(row["Zona"]==="São Lourenço/Curitiba") row["Zona"]="São Lourenço";
-      if(row["Zona"]==="Curitiba")              row["Zona"]="São Lourenço";
       row._year=d.getFullYear();
       row._month=d.getMonth()+1;
       row._mk=monthKey(d);
