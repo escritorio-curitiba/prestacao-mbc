@@ -541,15 +541,16 @@ const ZONE_BAT_GOALS = {
   "Ponta Grossa Norte":        50,
 };
 
-// Baptism goal for a dataset over nw weeks (zone-aware)
+// Monthly baptism goal = sum of zone goals (no week scaling)
 function getBaptismGoal(data, nw){
   const zones=[...new Set(data.map(r=>r["Zona"]).filter(Boolean))];
-  const monthly=zones.reduce((s,z)=>s+(ZONE_BAT_GOALS[z]||0),0);
-  return Math.round(monthly*nw/4);
+  // Use all known zones if data has multiple zones (mission-level view)
+  const src = zones.length ? zones : Object.keys(ZONE_BAT_GOALS);
+  return src.reduce((s,z)=>s+(ZONE_BAT_GOALS[z]||0), 0);
 }
-// Single-zone monthly goal scaled to nw weeks
+// Single-zone monthly goal (no week scaling)
 function getZoneBaptismGoal(zone, nw){
-  return Math.round((ZONE_BAT_GOALS[zone]||0)*nw/4);
+  return ZONE_BAT_GOALS[zone] || 0;
 }
 const TABLE_COLS = ["Batismos","Datas Marcadas","Convites","Igreja",
                     "Igreja RCs","Novos","Contatos","Lições c/ Membro"];
@@ -1240,7 +1241,7 @@ function renderBaptisms(){
           <div style="width:${Math.min(100,batPct).toFixed(0)}%;height:6px;border-radius:3px;background:${batC}"></div>
         </div>
         <span style="font-size:.8rem;font-weight:700;color:${batC}">${batPct.toFixed(0)}% da meta</span>
-        <span style="font-size:.75rem;color:#94a3b8;margin-left:10px">meta ${fmt(batGoalPeriod)} batismos</span>
+        <span style="font-size:.75rem;color:#94a3b8;margin-left:10px">meta ${fmt(batGoalPeriod)} batismos/mês</span>
       </div>`:""}
     </div>`;
 
