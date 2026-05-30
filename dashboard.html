@@ -167,6 +167,41 @@ select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
 .zone-dot{display:flex;align-items:center;gap:6px;font-size:.74rem;font-weight:600;color:var(--text)}
 .zone-dot span{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 
+/* ─── CONTROLE PRESTAÇÃO ────────────────────────────────────────── */
+.prest-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;align-items:start}
+@media(max-width:1200px){.prest-grid{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:800px){.prest-grid{grid-template-columns:repeat(2,1fr)}}
+.prest-col{border-radius:10px;overflow:hidden;border:1px solid var(--bdr)}
+.prest-zone-hdr{padding:9px 13px;font-size:.75rem;font-weight:800;
+                text-transform:uppercase;letter-spacing:.4px;color:#fff;
+                display:flex;align-items:center;justify-content:space-between}
+.prest-zone-hdr span{font-size:.7rem;font-weight:600;opacity:.85;background:rgba(0,0,0,.2);
+                     padding:2px 8px;border-radius:20px}
+.prest-district{padding:5px 10px;font-size:.62rem;font-weight:800;text-transform:uppercase;
+                letter-spacing:.5px;color:var(--muted);background:#f8fafc;
+                border-bottom:1px solid var(--bdr);border-top:1px solid var(--bdr);
+                margin-top:2px}
+.prest-area{padding:7px 12px;font-size:.77rem;font-weight:600;
+            border-bottom:1px solid rgba(0,0,0,.04);cursor:default;
+            display:flex;align-items:center;gap:7px;transition:opacity .15s}
+.prest-area:last-child{border-bottom:none}
+.prest-area.ok{background:#f0fdf4;color:#15803d}
+.prest-area.ok::before{content:"✓";font-size:.8rem;font-weight:900;color:#16a34a}
+.prest-area.nok{background:#fef2f2;color:#991b1b}
+.prest-area.nok::before{content:"✗";font-size:.8rem;font-weight:900;color:#dc2626;opacity:.7}
+.prest-summary{padding:8px 12px;font-size:.72rem;font-weight:700;
+               background:#f8fafc;border-top:2px solid var(--bdr);
+               display:flex;justify-content:space-between}
+
+input[type="date"]{font-family:inherit;border:1px solid var(--bdr);border-radius:var(--r-sm);
+                   padding:8px 12px;font-size:.82rem;background:var(--card);color:var(--text);
+                   outline:none;transition:border-color .15s}
+input[type="date"]:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+
+.prest-legend{display:flex;gap:16px;align-items:center;font-size:.75rem;font-weight:600}
+.prest-legend-item{display:flex;align-items:center;gap:5px}
+.prest-dot{width:10px;height:10px;border-radius:50%}
+
 /* ─── DATE RANGE PICKER ─────────────────────────────────────────── */
 .dr-wrap{position:relative}
 .dr-btn{
@@ -335,6 +370,7 @@ hr{border:none;border-top:1px solid var(--bdr);margin:18px 0}
   <button class="tab" onclick="showTab('batismos')">Batismos</button>
   <button class="tab" onclick="showTab('rcm')">Coord. Missionária</button>
   <button class="tab" onclick="showTab('sac')">Frequência Sacramental</button>
+  <button class="tab" onclick="showTab('prest')">Controle Prestação</button>
 </div>
 
 <!-- ══ TAB: VISÃO GERAL ══════════════════════════════════════════════ -->
@@ -507,6 +543,39 @@ hr{border:none;border-top:1px solid var(--bdr);margin:18px 0}
   <!-- Mini cards grid -->
   <div class="section-title" id="sac-title">Frequência por Zona</div>
   <div id="sac-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px"></div>
+</div>
+
+<!-- ══ TAB: CONTROLE PRESTAÇÃO ═══════════════════════════════════════ -->
+<div id="tab-prest" class="tab-content">
+  <div class="filters" style="margin-bottom:14px;align-items:center">
+    <div class="filter-group" style="flex:0 0 auto">
+      <label>Data do relatório</label>
+      <input type="date" id="prest-date" onchange="renderPrestacao()">
+    </div>
+    <div class="filter-group" style="flex:0 0 auto">
+      <label>Zona</label>
+      <select id="prest-zona" onchange="renderPrestacao()"></select>
+    </div>
+    <div class="filter-group" style="flex:0 0 auto;align-self:flex-end">
+      <button onclick="refreshAndRender()" style="
+        padding:8px 18px;background:var(--blue);color:#fff;border:none;
+        border-radius:var(--r-sm);font-size:.82rem;font-weight:700;cursor:pointer">
+        ↻ Atualizar dados
+      </button>
+    </div>
+    <div class="prest-legend" style="margin-left:auto;align-self:center">
+      <div class="prest-legend-item">
+        <div class="prest-dot" style="background:#16a34a"></div>
+        <span style="color:#15803d">Enviou</span>
+      </div>
+      <div class="prest-legend-item">
+        <div class="prest-dot" style="background:#fca5a5"></div>
+        <span style="color:#991b1b">Não enviou</span>
+      </div>
+    </div>
+  </div>
+  <div id="prest-stats" style="margin-bottom:12px"></div>
+  <div id="prest-board" class="prest-grid"></div>
 </div>
 
 </div><!-- /wrapper -->
@@ -830,7 +899,7 @@ function setPeriodType(t){
 ══════════════════════════════════════════════════════════════════ */
 function showTab(id){
   document.querySelectorAll(".tab").forEach((b,i)=>{
-    b.classList.toggle("active",["geral","tabela","tendencia","batismos","rcm","sac"][i]===id);
+    b.classList.toggle("active",["geral","tabela","tendencia","batismos","rcm","sac","prest"][i]===id);
   });
   document.querySelectorAll(".tab-content").forEach(el=>{
     el.classList.toggle("active",el.id==="tab-"+id);
@@ -840,6 +909,7 @@ function showTab(id){
   if(id==="tabela")    renderTable();
   if(id==="rcm")       renderRCM();
   if(id==="sac")       renderSacramental();
+  if(id==="prest")     {initPrestacaoDate();syncPrestZona();renderPrestacao();}
 }
 
 function renderActiveTab(){
@@ -852,6 +922,7 @@ function renderActiveTab(){
   else if(id==="batismos")  renderBaptisms();
   else if(id==="rcm")       renderRCM();
   else if(id==="sac")       renderSacramental();
+  else if(id==="prest")     renderPrestacao();
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -1950,6 +2021,153 @@ function renderSacramental(){
       });
     },0);
   });
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   CONTROLE PRESTAÇÃO
+══════════════════════════════════════════════════════════════════ */
+function initPrestacaoDate(){
+  const el=document.getElementById("prest-date");
+  if(el&&!el.value){
+    // Default to most recent Sunday
+    const t=new Date();
+    const day=t.getDay(); // 0=Sun
+    const sunday=new Date(t);
+    if(day!==0) sunday.setDate(t.getDate()-day);
+    el.value=sunday.toISOString().split("T")[0];
+  }
+}
+
+function syncPrestZona(){
+  const el=document.getElementById("prest-zona");
+  if(!el.options.length){
+    const zones=["all",...Object.keys(APP.zoneColors).sort()];
+    el.innerHTML=zones.map(z=>`<option value="${z}">${z==="all"?"Todas as Zonas":z}</option>`).join("");
+  }
+}
+
+// Build hierarchy: zone → district → [areas] from all known data
+function buildPrestHierarchy(zoneFilter){
+  const areaInfo={}; // area → {zone, district}
+  APP.raw.forEach(r=>{
+    const a=r["Área de Ensino"],z=r["Zona"];
+    if(!a||!z) return;
+    if(!areaInfo[a]) areaInfo[a]={zone:z,district:DISTRITO_MAP[a]||"—"};
+  });
+
+  const h={}; // zone → district → [area]
+  Object.entries(areaInfo).forEach(([area,{zone,district}])=>{
+    if(zoneFilter&&zoneFilter!=="all"&&zone!==zoneFilter) return;
+    if(!h[zone]) h[zone]={};
+    if(!h[zone][district]) h[zone][district]=[];
+    if(!h[zone][district].includes(area)) h[zone][district].push(area);
+  });
+  // Sort
+  Object.keys(h).forEach(z=>{
+    Object.keys(h[z]).forEach(d=>h[z][d].sort());
+  });
+  return h;
+}
+
+function renderPrestacao(){
+  if(!document.getElementById("tab-prest").classList.contains("active"))return;
+  syncPrestZona();
+  initPrestacaoDate();
+
+  const dateStr=document.getElementById("prest-date").value; // YYYY-MM-DD
+  const zoneFilter=document.getElementById("prest-zona").value||"all";
+
+  if(!dateStr){
+    document.getElementById("prest-board").innerHTML=
+      `<div class="empty">Selecione uma data para verificar.</div>`;
+    return;
+  }
+
+  // Parse selected date
+  const [sy,sm,sd]=dateStr.split("-").map(Number);
+  const selDate=new Date(sy,sm-1,sd);
+
+  // Build set of areas that submitted on that date
+  const submitted=new Set();
+  APP.raw.forEach(r=>{
+    if(!r._date) return;
+    if(r._date.getFullYear()===sy&&r._date.getMonth()===sm-1&&r._date.getDate()===sd){
+      if(r["Área de Ensino"]) submitted.add(r["Área de Ensino"]);
+    }
+  });
+
+  const hier=buildPrestHierarchy(zoneFilter);
+  const zones=Object.keys(hier).sort();
+
+  if(!zones.length){
+    document.getElementById("prest-board").innerHTML=
+      `<div class="empty">Nenhuma área encontrada para o filtro selecionado.</div>`;
+    return;
+  }
+
+  // Stats
+  let totalAreas=0,totalOk=0;
+  zones.forEach(z=>Object.values(hier[z]).forEach(areas=>{
+    totalAreas+=areas.length;
+    totalOk+=areas.filter(a=>submitted.has(a)).length;
+  }));
+  const pct=totalAreas?Math.round(totalOk/totalAreas*100):0;
+  const statC=pct>=80?"#16a34a":pct>=50?"#d97706":"#dc2626";
+  const fmtDate=`${String(sd).padStart(2,"0")}/${String(sm).padStart(2,"0")}/${sy}`;
+
+  document.getElementById("prest-stats").innerHTML=`
+    <div style="display:flex;align-items:center;gap:16px;padding:12px 16px;
+                background:var(--card);border:1px solid var(--bdr);border-radius:10px">
+      <div style="font-size:1.8rem;font-weight:900;color:${statC}">${totalOk}<span style="font-size:1rem;color:var(--muted);font-weight:500">/${totalAreas}</span></div>
+      <div>
+        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Áreas que enviaram em ${fmtDate}</div>
+        <div style="font-size:.82rem;font-weight:700;color:${statC}">${pct}% de cobertura</div>
+      </div>
+      <div style="flex:1;background:#e2e8f0;height:8px;border-radius:4px;margin-left:8px">
+        <div style="width:${pct}%;height:8px;border-radius:4px;background:${statC};transition:width .4s"></div>
+      </div>
+    </div>`;
+
+  // Build columns
+  document.getElementById("prest-board").innerHTML=zones.map(zone=>{
+    const color=APP.zoneColors[zone]||"#2563eb";
+    const districts=Object.keys(hier[zone]).sort((a,b)=>a==="—"?1:b==="—"?-1:a.localeCompare(b));
+    const zAreas=Object.values(hier[zone]).flat();
+    const zOk=zAreas.filter(a=>submitted.has(a)).length;
+
+    const rows=districts.map(dist=>{
+      const areas=hier[zone][dist];
+      const distRows=areas.map(area=>{
+        const ok=submitted.has(area);
+        return`<div class="prest-area ${ok?"ok":"nok"}">${area}</div>`;
+      }).join("");
+      const distHeader=dist==="—"?"Sem Distrito":dist;
+      return`<div class="prest-district">${distHeader}</div>${distRows}`;
+    }).join("");
+
+    return`<div class="prest-col">
+      <div class="prest-zone-hdr" style="background:${color}">
+        ${zone}<span>${zOk}/${zAreas.length}</span>
+      </div>
+      ${rows}
+      <div class="prest-summary">
+        <span style="color:${zOk===zAreas.length?"#16a34a":zOk>0?"#d97706":"#dc2626"}">
+          ${zOk}/${zAreas.length} enviaram
+        </span>
+        <span style="color:var(--muted)">${Math.round(zOk/zAreas.length*100)}%</span>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function refreshAndRender(){
+  const btn=event.currentTarget;
+  btn.textContent="↻ Atualizando…";btn.disabled=true;
+  // Clear cache and reload
+  APP.raw=[];
+  await loadData();
+  renderPrestacao();
+  btn.textContent="↻ Atualizar dados";btn.disabled=false;
 }
 
 /* ══════════════════════════════════════════════════════════════════
