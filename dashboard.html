@@ -1081,10 +1081,10 @@ function buildTable(data,grp,nw_){
   const body=rows.map(([name,vals])=>{
     const cells=TABLE_COLS.map(m=>{
       const v=vals[m]||0;
-      // For Batismos use zone-specific goal when grouping by Zona
+      // Batismos: zone-specific goal when grouping by Zona;
+      // for area-level, use standard 0.5/week (2/month) per area
       let std;
       if(m==="Batismos"&&grp==="Zona") std=getZoneBaptismGoal(name,nw_);
-      else if(m==="Batismos") std=getBaptismGoal(data.filter(r=>(r[grp]||"—")===name),nw_);
       else std=(EXCELLENCE[m]||0)*nw_;
       const p=std?v/std*100:0;
       const css=!std?"":v===0&&std>0?"cr":p>=80?"cg":p>=50?"cy":"cr";
