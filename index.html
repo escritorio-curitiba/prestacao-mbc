@@ -2046,12 +2046,19 @@ function syncPrestZona(){
   }
 }
 
+// Areas to hide in Controle Prestação
+const PREST_EXCLUDE=new Set([
+  "Jd. Osasco 3","Guaraituba 2","Timbú 3","Timbu 3","Solene 2",
+  "Dalcol 2","Palmeira 2","Jd. Europa 2","Bonsucesso 2",
+  "Jd. Verona 2","Cachoeira 2","Almirante 2"
+]);
+
 // Build hierarchy: zone → district → [areas] from all known data
 function buildPrestHierarchy(zoneFilter){
   const areaInfo={}; // area → {zone, district}
   APP.raw.forEach(r=>{
     const a=r["Área de Ensino"],z=r["Zona"];
-    if(!a||!z) return;
+    if(!a||!z||PREST_EXCLUDE.has(a)) return;
     if(!areaInfo[a]) areaInfo[a]={zone:z,district:DISTRITO_MAP[a]||"—"};
   });
 
