@@ -2172,7 +2172,16 @@ function generateReport(){
       rcmMatrix[a][w]=row?row["Correlação Missionária"]:null;
     });
   });
-  const rcmLbls=rcmWeeks.map(w=>{const p=w.split("-");const d=new Date(+p[0],+p[1]-1,+p[2]);return`${d.getDate()} ${MONTH_PT[d.getMonth()].slice(0,3)}`;});
+  // Label by actual submission date (most recent date in each week group)
+  // This avoids showing "27 Abr" when records are actually from "4 Mai"
+  function wkLabel(w){
+    const dates=fd.filter(r=>r._wk===w&&r._date).map(r=>r._date);
+    const ref=dates.length?dates.sort((a,b)=>b-a)[0]:null;
+    if(ref) return`${ref.getDate()} ${MONTH_PT[ref.getMonth()].slice(0,3)}`;
+    const p=w.split("-");const d=new Date(+p[0],+p[1]-1,+p[2]);
+    return`${d.getDate()} ${MONTH_PT[d.getMonth()].slice(0,3)}`;
+  }
+  const rcmLbls=rcmWeeks.map(wkLabel);
 
   // ── Sacramental chart data ─────────────────────────────────────
   const sacRows=fd.filter(r=>r["Frequência"]>0);
@@ -2198,7 +2207,7 @@ function generateReport(){
   </div>`).join("");
 
   // Sacramental per-area table
-  const sacLbls=sacWeeks.map(w=>{const p=w.split("-");const d=new Date(+p[0],+p[1]-1,+p[2]);return`${d.getDate()} ${MONTH_PT[d.getMonth()].slice(0,3)}`;});
+  const sacLbls=sacWeeks.map(wkLabel);
 
   const sacAreaTableHtml=`<table class="rel-table" style="margin-top:10px">
     <thead><tr>
