@@ -2281,7 +2281,7 @@ function generateReport(){
       </table>`:`<p style="color:#94a3b8;font-size:.8rem;padding:8px 0">Nenhum batismo registrado no período.</p>`}
     </div>
 
-    <div class="rel-section page-break-before">
+    <div class="rel-section">
       <div class="rel-section-title">🤝 Coordenação Missionária — Últimas 8 semanas</div>
       ${rcmHtml}
     </div>
@@ -2381,7 +2381,7 @@ function exportReportPDF(){
   .rel-kpi-lbl{font-size:6.5pt;font-weight:700;text-transform:uppercase;
                letter-spacing:.4px;color:#64748b;margin-top:2px}
   img{max-width:100%;height:auto;display:block;margin:4px 0}
-  .rel-chart-wrap img{height:140px;object-fit:contain;width:100%}
+  .rel-chart-wrap,.rel-chart-wrap img{height:110px!important;object-fit:contain;width:100%}
   table{width:100%;border-collapse:collapse;font-size:8pt;margin-top:4px}
   th{background:#0f172a;color:#fff;padding:5px 7px;text-align:left;
      font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
@@ -2406,12 +2406,10 @@ function exportReportPDF(){
     function printWin(){
       try{
         const body=win.document.body;
-        const A4_H=1050; // A4 at 96dpi minus margins (~277mm usable)
+        const A4_H=1000; // usable A4 height in px
         const contentH=body.scrollHeight;
-        if(contentH>A4_H){
-          const scale=Math.floor(A4_H/contentH*100);
-          body.style.zoom=scale+'%';
-        }
+        const scale=Math.min(100,Math.floor(A4_H/contentH*100));
+        body.style.zoom=scale+'%';
         win.print();
       }catch(e){ win.print(); }
     }
