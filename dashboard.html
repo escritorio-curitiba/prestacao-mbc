@@ -2158,8 +2158,13 @@ function generateReport(){
   const batVals=batWeeks.map(w=>Math.round(fd.filter(r=>r._wk===w).reduce((s,r)=>s+getNum(r,"Batismos"),0)));
   const batLbls=batWeeks.map(w=>{const p=w.split("-");const d=new Date(+p[0],+p[1]-1,+p[2]);return`${d.getDate()} ${MONTH_PT[d.getMonth()].slice(0,3)}`;});
 
-  // Total baptism count
+  // Total baptism count + per-area table
   const totalBat=Math.round(fd.reduce((s,r)=>s+getNum(r,"Batismos"),0));
+  const batAreas=[...new Set(fd.map(r=>r["Área de Ensino"]).filter(Boolean))].sort();
+  const batAreaRows=batAreas.map(a=>{
+    const val=Math.round(fd.filter(r=>r["Área de Ensino"]===a).reduce((s,r)=>s+getNum(r,"Batismos"),0));
+    return{area:a,val};
+  }).filter(r=>r.val>0).sort((a,b)=>b.val-a.val);
 
   // ── RCM table — use weeks from the selected period (fd) ────────
   const rcmWeeks=[...new Set(fd.map(r=>r._wk).filter(Boolean))].sort();
@@ -2263,6 +2268,17 @@ function generateReport(){
     <div class="rel-section">
       <div class="rel-section-title">💧 Batismos — ${totalBat} batismo(s) no período</div>
       <div class="rel-chart-wrap"><canvas id="rel-bat-chart"></canvas></div>
+      ${batAreaRows.length?`<table class="rel-table" style="margin-top:10px">
+        <thead><tr><th>Área</th><th style="text-align:center">Batismos</th></tr></thead>
+        <tbody>${batAreaRows.map(r=>`<tr>
+          <td>${r.area}</td>
+          <td style="text-align:center;font-weight:700">${r.val}</td>
+        </tr>`).join("")}</tbody>
+        <tfoot><tr>
+          <td><strong>TOTAL</strong></td>
+          <td style="text-align:center"><strong>${totalBat}</strong></td>
+        </tr></tfoot>
+      </table>`:`<p style="color:#94a3b8;font-size:.8rem;padding:8px 0">Nenhum batismo registrado no período.</p>`}
     </div>
 
     <div class="rel-section page-break-before">
