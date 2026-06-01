@@ -2146,27 +2146,20 @@ function generateReport(){
   const today=new Date().toLocaleDateString("pt-BR");
 
   // ── KPIs ──────────────────────────────────────────────────────
-  const kpis=["Batismos","Convites","Igreja","Contatos"].map(m=>({
-    lbl:m, val:Math.round(fd.reduce((s,r)=>s+getNum(r,m),0))
-  }));
+  const kpis=[
+    {col:"Batismos",           lbl:"Batismos"},
+    {col:"Convites",           lbl:"Convites Batismais"},
+    {col:"Igreja",             lbl:"Freq. Sacram. Amigos"},
+    {col:"Contatos",           lbl:"Contatos"},
+  ].map(k=>({lbl:k.lbl, val:Math.round(fd.reduce((s,r)=>s+getNum(r,k.col),0))}));
 
   // ── Baptism weekly chart data ──────────────────────────────────
   const batWeeks=[...new Set(fd.map(r=>r._wk).filter(Boolean))].sort();
   const batVals=batWeeks.map(w=>Math.round(fd.filter(r=>r._wk===w).reduce((s,r)=>s+getNum(r,"Batismos"),0)));
   const batLbls=batWeeks.map(w=>{const p=w.split("-");const d=new Date(+p[0],+p[1]-1,+p[2]);return`${d.getDate()} ${MONTH_PT[d.getMonth()].slice(0,3)}`;});
 
-  // ── Baptism names table ────────────────────────────────────────
-  const IGNORE=new Set(["","0","n/a","na","nenhum","none","-","n"]);
-  const batNames=[];
-  fd.forEach(r=>{
-    const raw=r["Nome Batizados"]||"";
-    if(!raw||IGNORE.has(raw.trim().toLowerCase()))return;
-    raw.split(/[\n,;]+/).forEach(n=>{
-      n=n.trim();
-      if(n&&!IGNORE.has(n.toLowerCase())&&n.length>2)
-        batNames.push({data:r["Data"],area:r["Área de Ensino"],zona:r["Zona"],nome:n});
-    });
-  });
+  // Total baptism count
+  const totalBat=Math.round(fd.reduce((s,r)=>s+getNum(r,"Batismos"),0));
 
   // ── RCM table ──────────────────────────────────────────────────
   const rcmWeeks=[...new Set(APP.raw.filter(r=>r["Estaca"]===stk).map(r=>r._wk).filter(Boolean))].sort().slice(-8);
@@ -2184,8 +2177,19 @@ function generateReport(){
   // ── Sacramental chart data ─────────────────────────────────────
   const sacRows=APP.raw.filter(r=>r["Estaca"]===stk&&r["Frequência"]>0);
   const sacWeeks=[...new Set(fd.map(r=>r._wk).filter(Boolean))].sort();
+  // Total per week
   const sacVals=sacWeeks.map(w=>Math.round(sacRows.filter(r=>r._wk===w).reduce((s,r)=>s+(r["Frequência"]||0),0)));
   const sacAvg=sacVals.filter(v=>v).length?Math.round(sacVals.filter(v=>v).reduce((a,b)=>a+b,0)/sacVals.filter(v=>v).length):0;
+  // Per-area breakdown for the full period
+  const sacAreas=[...new Set(sacRows.map(r=>r["Área de Ensino"]).filter(Boolean))].sort();
+  const sacAreaRows=sacAreas.map(a=>{
+    const aRows=sacRows.filter(r=>r["Área de Ensino"]===a);
+    const vals=sacWeeks.map(w=>aRows.filter(r=>r._wk===w).reduce((s,r)=>s+(r["Frequência"]||0),0));
+    const validVals=vals.filter(v=>v>0);
+    const avg=validVals.length?Math.round(validVals.reduce((a,b)=>a+b,0)/validVals.length):0;
+    const total=vals.reduce((a,b)=>a+b,0);
+    return{area:a,vals,avg,total};
+  });
 
   // ── Build HTML ─────────────────────────────────────────────────
   const kpiHtml=kpis.map(k=>`<div class="rel-kpi">
@@ -2193,13 +2197,29 @@ function generateReport(){
     <div class="rel-kpi-lbl">${k.lbl}</div>
   </div>`).join("");
 
-  const batNamesHtml=batNames.length
-    ?`<table class="rel-table">
-        <thead><tr><th>#</th><th>Nome</th><th>Data</th><th>Área</th><th>Zona</th></tr></thead>
-        <tbody>${batNames.map((b,i)=>`<tr><td>${i+1}</td><td style="font-weight:600">${b.nome}</td><td>${b.data}</td><td>${b.area}</td><td>${b.zona}</td></tr>`).join("")}</tbody>
-        <tfoot><tr><td colspan="5"><strong>Total: ${batNames.length} batismo(s)</strong></td></tr></tfoot>
-      </table>`
-    :`<p style="color:#94a3b8;font-size:.82rem;padding:8px 0">Nenhum batismo com nome registrado no período.</p>`;
+  // Sacramental per-area table
+  const sacLbls=sacWeeks.map(w=>{const p=w.split("-");const d=new Date(+p[0],+p[1]-1,+p[2]);return`${d.getDate()} ${MONTH_PT[d.getMonth()].slice(0,3)}`;});
+
+  const sacAreaTableHtml=`<table class="rel-table" style="margin-top:10px">
+    <thead><tr>
+      <th>Área</th>
+      ${sacLbls.map(l=>`<th style="text-align:center">${l}</th>`).join("")}
+      <th style="text-align:center">Média</th>
+      <th style="text-align:center">Total</th>
+    </tr></thead>
+    <tbody>${sacAreaRows.map(r=>`<tr>
+      <td>${r.area}</td>
+      ${r.vals.map(v=>`<td style="text-align:center;font-weight:${v>0?"600":"400"};color:${v>0?"#0f172a":"#94a3b8"}">${v>0?v:"—"}</td>`).join("")}
+      <td style="text-align:center;font-weight:700">${r.avg}</td>
+      <td style="text-align:center;font-weight:700">${r.total}</td>
+    </tr>`).join("")}</tbody>
+    <tfoot><tr>
+      <td><strong>TOTAL</strong></td>
+      ${sacVals.map(v=>`<td style="text-align:center;font-weight:700">${v||"—"}</td>`).join("")}
+      <td style="text-align:center;font-weight:700">${sacAvg}</td>
+      <td style="text-align:center;font-weight:700">${sacVals.reduce((a,b)=>a+b,0)}</td>
+    </tr></tfoot>
+  </table>`;
 
   const rcmHtml=`<table class="rel-table">
     <thead><tr><th>Área</th>${rcmLbls.map(l=>`<th style="text-align:center">${l}</th>`).join("")}<th style="text-align:center">Média</th></tr></thead>
@@ -2217,13 +2237,6 @@ function generateReport(){
     }).join("")}</tbody>
   </table>`;
 
-  const sacLbls=sacWeeks.map(w=>{const p=w.split("-");const d=new Date(+p[0],+p[1]-1,+p[2]);return`${d.getDate()} ${MONTH_PT[d.getMonth()].slice(0,3)}`;});
-
-  const sacTableHtml=`<table class="rel-table" style="margin-top:10px">
-    <thead><tr><th>Semana</th><th>Frequência Total</th></tr></thead>
-    <tbody>${sacWeeks.map((w,i)=>`<tr><td>${sacLbls[i]||w}</td><td style="font-weight:600">${fmt(sacVals[i]||0)}</td></tr>`).join("")}</tbody>
-    <tfoot><tr><td><strong>Média</strong></td><td><strong>${fmt(sacAvg)}/semana</strong></td></tr></tfoot>
-  </table>`;
 
   document.getElementById("rel-preview").style.display="block";
   document.getElementById("rel-preview").innerHTML=`
@@ -2239,9 +2252,8 @@ function generateReport(){
     </div>
 
     <div class="rel-section">
-      <div class="rel-section-title">💧 Batismos — ${batNames.length} batismo(s)</div>
+      <div class="rel-section-title">💧 Batismos — ${totalBat} batismo(s) no período</div>
       <div class="rel-chart-wrap"><canvas id="rel-bat-chart"></canvas></div>
-      ${batNamesHtml}
     </div>
 
     <div class="rel-section page-break-before">
@@ -2250,9 +2262,9 @@ function generateReport(){
     </div>
 
     <div class="rel-section">
-      <div class="rel-section-title">🏠 Frequência Sacramental</div>
+      <div class="rel-section-title">🏠 Frequência Sacramental por Área</div>
       <div class="rel-chart-wrap"><canvas id="rel-sac-chart"></canvas></div>
-      ${sacTableHtml}
+      ${sacAreaTableHtml}
     </div>
 
     <div class="rel-footer">
