@@ -2137,9 +2137,8 @@ function generateReport(){
   const area=document.getElementById("rel-area").value||"all";
   if(stk==="all"){alert("Selecione uma Estaca para gerar o relatório.");return;}
 
-  // Filter data
-  let fd=getDateBase();
-  fd=fd.filter(r=>r["Estaca"]===stk);
+  // Filter data by date + estaca + area
+  let fd=getDateBase().filter(r=>r["Estaca"]===stk);
   if(area!=="all") fd=fd.filter(r=>r["Área de Ensino"]===area);
 
   const nw=nWeeks(fd)||1;
@@ -2218,13 +2217,13 @@ function generateReport(){
     }).join("")}</tbody>
   </table>`;
 
+  const sacLbls=sacWeeks.map(w=>{const p=w.split("-");const d=new Date(+p[0],+p[1]-1,+p[2]);return`${d.getDate()} ${MONTH_PT[d.getMonth()].slice(0,3)}`;});
+
   const sacTableHtml=`<table class="rel-table" style="margin-top:10px">
     <thead><tr><th>Semana</th><th>Frequência Total</th></tr></thead>
-    <tbody>${sacWeeks.map((w,i)=>`<tr><td>${sacLbls?.[i]||w}</td><td style="font-weight:600">${fmt(sacVals[i]||0)}</td></tr>`).join("")}</tbody>
+    <tbody>${sacWeeks.map((w,i)=>`<tr><td>${sacLbls[i]||w}</td><td style="font-weight:600">${fmt(sacVals[i]||0)}</td></tr>`).join("")}</tbody>
     <tfoot><tr><td><strong>Média</strong></td><td><strong>${fmt(sacAvg)}/semana</strong></td></tr></tfoot>
   </table>`;
-
-  const sacLbls=sacWeeks.map(w=>{const p=w.split("-");const d=new Date(+p[0],+p[1]-1,+p[2]);return`${d.getDate()} ${MONTH_PT[d.getMonth()].slice(0,3)}`;});
 
   document.getElementById("rel-preview").style.display="block";
   document.getElementById("rel-preview").innerHTML=`
