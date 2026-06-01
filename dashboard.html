@@ -2161,21 +2161,21 @@ function generateReport(){
   // Total baptism count
   const totalBat=Math.round(fd.reduce((s,r)=>s+getNum(r,"Batismos"),0));
 
-  // ── RCM table ──────────────────────────────────────────────────
-  const rcmWeeks=[...new Set(APP.raw.filter(r=>r["Estaca"]===stk).map(r=>r._wk).filter(Boolean))].sort().slice(-8);
-  const rcmAreas=[...new Set(APP.raw.filter(r=>r["Estaca"]===stk).map(r=>r["Área de Ensino"]).filter(Boolean))].sort();
+  // ── RCM table — use weeks from the selected period (fd) ────────
+  const rcmWeeks=[...new Set(fd.map(r=>r._wk).filter(Boolean))].sort();
+  const rcmAreas=[...new Set(fd.map(r=>r["Área de Ensino"]).filter(Boolean))].sort();
   const rcmMatrix={};
   rcmAreas.forEach(a=>{
     rcmMatrix[a]={};
     rcmWeeks.forEach(w=>{
-      const row=APP.raw.find(r=>r["Área de Ensino"]===a&&r._wk===w&&r["Estaca"]===stk);
+      const row=fd.find(r=>r["Área de Ensino"]===a&&r._wk===w);
       rcmMatrix[a][w]=row?row["Correlação Missionária"]:null;
     });
   });
   const rcmLbls=rcmWeeks.map(w=>{const p=w.split("-");const d=new Date(+p[0],+p[1]-1,+p[2]);return`${d.getDate()} ${MONTH_PT[d.getMonth()].slice(0,3)}`;});
 
   // ── Sacramental chart data ─────────────────────────────────────
-  const sacRows=APP.raw.filter(r=>r["Estaca"]===stk&&r["Frequência"]>0);
+  const sacRows=fd.filter(r=>r["Frequência"]>0);
   const sacWeeks=[...new Set(fd.map(r=>r._wk).filter(Boolean))].sort();
   // Total per week
   const sacVals=sacWeeks.map(w=>Math.round(sacRows.filter(r=>r._wk===w).reduce((s,r)=>s+(r["Frequência"]||0),0)));
