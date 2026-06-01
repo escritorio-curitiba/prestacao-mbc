@@ -2311,21 +2311,88 @@ function generateReport(){
 }
 
 function exportReportPDF(){
-  // Convert all canvases to images for print
-  document.querySelectorAll("#rel-preview canvas").forEach(c=>{
-    const img=document.createElement("img");
-    img.src=c.toDataURL("image/png");
-    img.style.width="100%";img.style.height="auto";
-    img.className="print-canvas";
-    c.className="print-hidden";
-    c.parentNode.insertBefore(img,c);
+  const preview=document.getElementById("rel-preview");
+  if(!preview||preview.style.display==="none"){
+    alert("Gere o relatório antes de exportar.");return;
+  }
+
+  // Step 1: convert all canvas to base64 images (charts)
+  const canvases=preview.querySelectorAll("canvas");
+  const snapshots=[];
+  canvases.forEach(c=>{
+    try{
+      const img=document.createElement("img");
+      img.src=c.toDataURL("image/png");
+      img.style.cssText="width:100%;height:auto;display:block";
+      c.parentNode.insertBefore(img,c.nextSibling);
+      c.style.display="none";
+      snapshots.push({c,img});
+    }catch(e){}
   });
-  window.print();
-  // Restore canvases after print
+
+  // Step 2: wait for images to be ready, then open print window
   setTimeout(()=>{
-    document.querySelectorAll("#rel-preview img.print-canvas").forEach(img=>img.remove());
-    document.querySelectorAll("#rel-preview canvas.print-hidden").forEach(c=>c.classList.remove("print-hidden"));
-  },2000);
+    const stk=document.getElementById("rel-estaca").value||"Relatório";
+    const html=`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Relatório — ${stk}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',Arial,sans-serif;font-size:11pt;color:#1e293b;
+       background:#fff;padding:0;line-height:1.5}
+  @page{size:A4;margin:1.8cm 1.5cm}
+
+  .rel-header{text-align:center;margin-bottom:22px;padding-bottom:16px;
+              border-bottom:3px solid #0f172a}
+  .rel-header h1{font-size:17pt;font-weight:900;color:#0f172a;letter-spacing:-.3px}
+  .rel-header h2{font-size:13pt;font-weight:700;color:#2563eb;margin:5px 0 3px}
+  .rel-header p{font-size:9pt;color:#64748b}
+
+  .rel-section{margin-bottom:20px;page-break-inside:avoid}
+  .page-break-before{page-break-before:always;padding-top:16px}
+  .rel-section-title{font-size:9pt;font-weight:800;text-transform:uppercase;
+                     letter-spacing:.6px;color:#0f172a;border-left:4px solid #2563eb;
+                     padding-left:8px;margin-bottom:10px}
+  .rel-kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+  .rel-kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;
+           padding:10px 12px;text-align:center}
+  .rel-kpi-val{font-size:20pt;font-weight:900;color:#0f172a}
+  .rel-kpi-lbl{font-size:7pt;font-weight:700;text-transform:uppercase;
+               letter-spacing:.5px;color:#64748b;margin-top:2px}
+  img{max-width:100%;height:auto;display:block;margin:8px 0}
+  table{width:100%;border-collapse:collapse;font-size:9pt;margin-top:6px}
+  th{background:#0f172a;color:#fff;padding:6px 8px;text-align:left;
+     font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+  td{padding:5px 8px;border-bottom:1px solid #f1f5f9;color:#1e293b}
+  tr:last-child td{border-bottom:none}
+  tfoot td{background:#f8fafc;font-weight:700;border-top:2px solid #e2e8f0}
+  .rel-rcm-cell-ok{color:#15803d;font-weight:700}
+  .rel-rcm-cell-nok{color:#991b1b;font-weight:600}
+  .rel-rcm-cell-nd{color:#94a3b8}
+  .rel-footer{text-align:center;font-size:8pt;color:#94a3b8;
+              margin-top:20px;padding-top:10px;border-top:1px solid #e2e8f0}
+</style>
+</head>
+<body>${preview.innerHTML}</body>
+</html>`;
+
+    const win=window.open("","_blank","width=900,height=800");
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    // Print after fonts/images load
+    win.onload=()=>{ win.print(); };
+    setTimeout(()=>{ try{win.print();}catch(e){} },1200);
+
+    // Step 3: restore canvases in original window
+    setTimeout(()=>{
+      snapshots.forEach(({c,img})=>{c.style.display="";img.remove();});
+    },500);
+  },300);
 }
 
 /* ══════════════════════════════════════════════════════════════════
