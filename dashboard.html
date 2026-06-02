@@ -430,6 +430,7 @@ hr{border:none;border-top:1px solid var(--bdr);margin:18px 0}
   <button class="tab" onclick="showTab('sac')">Frequência Sacramental</button>
   <button class="tab" onclick="showTab('prest')">Controle Prestação</button>
   <button class="tab" onclick="showTab('relatorio')">Relatório Estacas</button>
+  <button class="tab" onclick="showTab('relatorio-completo')">Relatório Completo</button>
 </div>
 
 <!-- ══ TAB: VISÃO GERAL ══════════════════════════════════════════════ -->
@@ -622,6 +623,23 @@ hr{border:none;border-top:1px solid var(--bdr);margin:18px 0}
     <span style="font-size:.76rem;color:#64748b">Período: <strong id="rel-period-label">—</strong></span>
   </div>
   <div id="rel-preview" style="display:none"></div>
+</div>
+
+<!-- ══ TAB: RELATÓRIO COMPLETO ══════════════════════════════════════ -->
+<div id="tab-relatorio-completo" class="tab-content">
+  <div class="filters" style="margin-bottom:10px">
+    <div class="filter-group">
+      <label>Zona (opcional — deixe vazio para toda a missão)</label>
+      <select id="rc-zona"></select>
+    </div>
+  </div>
+  <div class="rel-actions">
+    <button class="btn-generate" onclick="generateFullReport()">⚙ Gerar Relatório Completo</button>
+    <button class="btn-pdf" id="rc-btn-pdf" onclick="exportFullPDF()" disabled>⬇ Exportar PDF</button>
+    <span style="font-size:.76rem;color:#64748b">Período: <strong id="rc-period-label">—</strong></span>
+  </div>
+  <div id="rc-progress" style="display:none;margin-bottom:10px;font-size:.82rem;color:#2563eb"></div>
+  <div id="rc-preview" style="display:none"></div>
 </div>
 
 <!-- ══ TAB: CONTROLE PRESTAÇÃO ═══════════════════════════════════════ -->
@@ -978,7 +996,7 @@ function setPeriodType(t){
 ══════════════════════════════════════════════════════════════════ */
 function showTab(id){
   document.querySelectorAll(".tab").forEach((b,i)=>{
-    b.classList.toggle("active",["geral","tabela","tendencia","batismos","rcm","sac","prest","relatorio"][i]===id);
+    b.classList.toggle("active",["geral","tabela","tendencia","batismos","rcm","sac","prest","relatorio","relatorio-completo"][i]===id);
   });
   document.querySelectorAll(".tab-content").forEach(el=>{
     el.classList.toggle("active",el.id==="tab-"+id);
@@ -990,6 +1008,7 @@ function showTab(id){
   if(id==="sac")       renderSacramental();
   if(id==="prest")     {initPrestacaoDate();syncPrestZona();renderPrestacao();}
   if(id==="relatorio") syncRelFilters();
+  if(id==="relatorio-completo") initRCFilters();
 }
 
 function renderActiveTab(){
@@ -1004,6 +1023,7 @@ function renderActiveTab(){
   else if(id==="sac")       renderSacramental();
   else if(id==="prest")     renderPrestacao();
   else if(id==="relatorio") syncRelFilters();
+  else if(id==="relatorio-completo") initRCFilters();
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -2102,6 +2122,373 @@ function renderSacramental(){
       });
     },0);
   });
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   RELATÓRIO COMPLETO — MISSÃO / ZONAS / ESTACAS
+══════════════════════════════════════════════════════════════════ */
+function initRCFilters(){
+  const el=document.getElementById("rc-zona");
+  if(!el.options.length){
+    const zones=["all",...Object.keys(APP.zoneColors).sort()];
+    el.innerHTML=zones.map(z=>`<option value="${z}">${z==="all"?"Toda a Missão":z}</option>`).join("");
+  }
+  document.getElementById("rc-period-label").textContent=
+    document.getElementById("caption").querySelector("strong")?.textContent||"—";
+}
+
+// ── helpers ───────────────────────────────────────────────────────
+function rcFmt(n){ return isNaN(n)?n:Math.round(n).toLocaleString("pt-BR"); }
+
+function rcWeekLabel(fd, wk){
+  const dates=fd.filter(r=>r._wk===wk&&r._date).map(r=>r._date);
+  const d=dates.length?dates.sort((a,b)=>b-a)[0]:null;
+  if(d) return`${d.getDate()} ${MONTH_PT[d.getMonth()].slice(0,3)}`;
+  const p=wk.split("-"); const dd=new Date(+p[0],+p[1]-1,+p[2]);
+  return`${dd.getDate()} ${MONTH_PT[dd.getMonth()].slice(0,3)}`;
+}
+
+function rcPct(val,goal){
+  if(!goal)return"";
+  const p=Math.round(val/goal*100);
+  const c=p>=80?"#16a34a":p>=50?"#d97706":"#dc2626";
+  return`<span style="color:${c};font-weight:700">${p}%</span>`;
+}
+
+const RC_COLS=["Batismos","Datas Marcadas","Convites","Igreja","Igreja RCs","Novos","Contatos","Lições c/ Membro"];
+const RC_COL_SHORT=["Bat.","Datas","Conv.","Igreja","RCs","Novos","Cont.","Lições"];
+
+// ── section builders ──────────────────────────────────────────────
+function rcCover(periodLabel,today,zoneFilter){
+  const subtitle=zoneFilter==="all"?"Prestação de Contas — Missão Completa":`Prestação de Contas — ${zoneFilter}`;
+  return`<div class="rpt-page rpt-cover">
+    <div class="rpt-cover-inner">
+      <div class="rpt-cover-logo">MBC</div>
+      <h1 class="rpt-cover-title">MISSÃO BRASIL CURITIBA</h1>
+      <h2 class="rpt-cover-sub">${subtitle}</h2>
+      <div class="rpt-cover-period">${periodLabel}</div>
+      <div class="rpt-cover-date">Gerado em ${today}</div>
+    </div>
+  </div>`;
+}
+
+function rcMissionSummary(fd, periodLabel){
+  const nw=nWeeks(fd)||1;
+  const weeks=[...new Set(fd.map(r=>r._wk).filter(Boolean))].sort();
+
+  // KPI cards
+  const kpis=[
+    {col:"Batismos",lbl:"Batismos",goal:getBaptismGoal(fd,nw)},
+    {col:"Convites",lbl:"Convites Batismais",goal:EXCELLENCE["Convites"]*nAreas(fd)*nw},
+    {col:"Igreja",lbl:"Freq. Sacram. Amigos",goal:EXCELLENCE["Igreja"]*nAreas(fd)*nw},
+    {col:"Novos",lbl:"Novas Pessoas",goal:EXCELLENCE["Novos"]*nAreas(fd)*nw},
+    {col:"Datas Marcadas",lbl:"Datas Marcadas",goal:EXCELLENCE["Datas Marcadas"]*nAreas(fd)*nw},
+    {col:"Contatos",lbl:"Contatos",goal:EXCELLENCE["Contatos"]*nAreas(fd)*nw},
+  ];
+  const kpiHtml=kpis.map(k=>{
+    const val=Math.round(fd.reduce((s,r)=>s+getNum(r,k.col),0));
+    const pct=k.goal?Math.round(val/k.goal*100):0;
+    const c=pct>=80?"#16a34a":pct>=50?"#d97706":"#dc2626";
+    return`<div class="rpt-kpi">
+      <div class="rpt-kpi-val">${rcFmt(val)}</div>
+      <div class="rpt-kpi-lbl">${k.lbl}</div>
+      ${k.goal?`<div style="font-size:7.5pt;color:${c};font-weight:700">${pct}% da meta ${rcFmt(k.goal)}</div>`:""}
+    </div>`;
+  }).join("");
+
+  // Weekly summary table
+  const wkLbls=weeks.map(w=>rcWeekLabel(fd,w));
+  const wkRows=RC_COLS.map((col,ci)=>{
+    const vals=weeks.map(w=>Math.round(fd.filter(r=>r._wk===w).reduce((s,r)=>s+getNum(r,col),0)));
+    const cells=vals.map(v=>`<td style="text-align:center">${rcFmt(v)}</td>`).join("");
+    const total=Math.round(fd.reduce((s,r)=>s+getNum(r,col),0));
+    return`<tr><td style="font-weight:600">${RC_COL_SHORT[ci]}</td>${cells}<td style="text-align:center;font-weight:700;background:#f8fafc">${rcFmt(total)}</td></tr>`;
+  }).join("");
+
+  return`<div class="rpt-page">
+    <div class="rpt-page-header"><span class="rpt-mission-badge">MISSÃO BRASIL CURITIBA</span><span>${periodLabel}</span></div>
+    <div class="rpt-section-title">📊 Resumo da Missão</div>
+    <div class="rpt-kpi-grid">${kpiHtml}</div>
+    <div class="rpt-section-title" style="margin-top:10px">Indicadores Semanais</div>
+    <table class="rpt-table">
+      <thead><tr><th>Indicador</th>${wkLbls.map(l=>`<th style="text-align:center">${l}</th>`).join("")}<th style="text-align:center">Total</th></tr></thead>
+      <tbody>${wkRows}</tbody>
+    </table>
+  </div>`;
+}
+
+function rcZoneProgress(fd, zones){
+  const nw=nWeeks(fd)||1;
+  const cards=zones.map(zone=>{
+    const zd=fd.filter(r=>r["Zona"]===zone);
+    const znw=nWeeks(zd)||1;
+    const color=APP.zoneColors[zone]||"#2563eb";
+    const items=RC_COLS.map(col=>{
+      const val=Math.round(zd.reduce((s,r)=>s+getNum(r,col),0));
+      const goal=col==="Batismos"?getZoneBaptismGoal(zone,znw):(EXCELLENCE[col]||0)*znw;
+      const pct=goal?Math.round(val/goal*100):0;
+      const c=pct>=80?"#16a34a":pct>=50?"#d97706":"#dc2626";
+      return`<div class="rpt-zp-item">
+        <div class="rpt-zp-lbl">${col}</div>
+        <div class="rpt-zp-val">${rcFmt(val)}</div>
+        <div style="color:${c};font-size:7pt;font-weight:700">${pct}%</div>
+        <div class="rpt-zp-bar-bg"><div class="rpt-zp-bar" style="width:${Math.min(100,pct)}%;background:${c}"></div></div>
+        <div style="font-size:6.5pt;color:#94a3b8">meta ${rcFmt(goal)}</div>
+      </div>`;
+    }).join("");
+    return`<div class="rpt-zone-card">
+      <div class="rpt-zone-hdr" style="background:${color}">${zone}</div>
+      <div class="rpt-zp-grid">${items}</div>
+    </div>`;
+  }).join("");
+  return`<div class="rpt-page">
+    <div class="rpt-page-header"><span class="rpt-mission-badge">MISSÃO BRASIL CURITIBA</span><span>Progresso das Metas</span></div>
+    <div class="rpt-section-title">🎯 Progresso das Metas por Zona</div>
+    <div class="rpt-zones-wrap">${cards}</div>
+  </div>`;
+}
+
+function rcZonePage(fd, zone){
+  const zd=fd.filter(r=>r["Zona"]===zone);
+  if(!zd.length) return "";
+  const color=APP.zoneColors[zone]||"#2563eb";
+  const weeks=[...new Set(zd.map(r=>r._wk).filter(Boolean))].sort();
+  const wkLbls=weeks.map(w=>rcWeekLabel(zd,w));
+  const areas=[...new Set(zd.map(r=>r["Área de Ensino"]).filter(Boolean))].sort();
+
+  // Weekly by indicator table
+  const wkRows=RC_COLS.map((col,ci)=>{
+    const vals=weeks.map(w=>Math.round(zd.filter(r=>r._wk===w).reduce((s,r)=>s+getNum(r,col),0)));
+    const total=vals.reduce((a,b)=>a+b,0);
+    return`<tr><td style="font-weight:600">${RC_COL_SHORT[ci]}</td>
+      ${vals.map(v=>`<td style="text-align:center">${rcFmt(v)}</td>`).join("")}
+      <td style="text-align:center;font-weight:700;background:#f8fafc">${rcFmt(total)}</td></tr>`;
+  }).join("");
+
+  // Area table
+  const areaRows=areas.map(area=>{
+    const ad=zd.filter(r=>r["Área de Ensino"]===area);
+    const cells=RC_COLS.map(col=>{
+      const v=Math.round(ad.reduce((s,r)=>s+getNum(r,col),0));
+      const nw_=nWeeks(ad)||1;
+      const std=col==="Batismos"?0.5*nw_:(EXCELLENCE[col]||0)*nw_;
+      const pct=std?v/std*100:0;
+      const bg=!std?"":v===0&&std>0?"#fef2f2":pct>=80?"#f0fdf4":pct>=50?"#fefce8":"#fef2f2";
+      const col2=!std?"":v===0&&std>0?"#991b1b":pct>=80?"#15803d":pct>=50?"#92400e":"#991b1b";
+      return`<td style="text-align:center;background:${bg};color:${col2};font-weight:600">${rcFmt(v)}</td>`;
+    }).join("");
+    return`<tr><td style="font-size:7.5pt">${area}</td>${cells}</tr>`;
+  }).join("");
+
+  const totals=RC_COLS.map(col=>rcFmt(Math.round(zd.reduce((s,r)=>s+getNum(r,col),0))));
+
+  return`<div class="rpt-page">
+    <div class="rpt-page-header">
+      <span class="rpt-zone-badge" style="background:${color}">${zone.toUpperCase()}</span>
+    </div>
+    <div class="rpt-section-title">Indicadores Semanais — ${zone}</div>
+    <table class="rpt-table" style="margin-bottom:10px">
+      <thead><tr><th>Indicador</th>${wkLbls.map(l=>`<th style="text-align:center">${l}</th>`).join("")}<th style="text-align:center">Total</th></tr></thead>
+      <tbody>${wkRows}</tbody>
+    </table>
+    <div class="rpt-section-title">Indicadores por Área</div>
+    <table class="rpt-table">
+      <thead><tr><th>Área</th>${RC_COL_SHORT.map(c=>`<th style="text-align:center;font-size:6.5pt">${c}</th>`).join("")}</tr></thead>
+      <tbody>${areaRows}</tbody>
+      <tfoot><tr><td><strong>TOTAL</strong></td>${totals.map(v=>`<td style="text-align:center"><strong>${v}</strong></td>`).join("")}</tr></tfoot>
+    </table>
+  </div>`;
+}
+
+function rcStakePage(fd, stake){
+  const sd=fd.filter(r=>r["Estaca"]===stake);
+  if(!sd.length) return "";
+  const weeks=[...new Set(sd.map(r=>r._wk).filter(Boolean))].sort();
+  const wkLbls=weeks.map(w=>rcWeekLabel(sd,w));
+  const areas=[...new Set(sd.map(r=>r["Área de Ensino"]).filter(Boolean))].sort();
+
+  // Weekly indicator table
+  const wkRows=RC_COLS.map((col,ci)=>{
+    const vals=weeks.map(w=>Math.round(sd.filter(r=>r._wk===w).reduce((s,r)=>s+getNum(r,col),0)));
+    return`<tr><td style="font-weight:600">${RC_COL_SHORT[ci]}</td>
+      ${vals.map(v=>`<td style="text-align:center">${rcFmt(v)}</td>`).join("")}
+      <td style="text-align:center;font-weight:700;background:#f8fafc">${rcFmt(vals.reduce((a,b)=>a+b,0))}</td></tr>`;
+  }).join("");
+
+  // Sacramental by area
+  const sacAreas=[...new Set(sd.filter(r=>r["Frequência"]>0).map(r=>r["Área de Ensino"]).filter(Boolean))].sort();
+  const sacRows=sacAreas.map(area=>{
+    const vals=weeks.map(w=>{
+      const v=sd.filter(r=>r["Área de Ensino"]===area&&r._wk===w).reduce((s,r)=>s+(r["Frequência"]||0),0);
+      return v>0?Math.round(v):null;
+    });
+    const validVals=vals.filter(v=>v!==null);
+    const avg=validVals.length?Math.round(validVals.reduce((a,b)=>a+b,0)/validVals.length):0;
+    const total=validVals.reduce((a,b)=>a+b,0);
+    const cells=vals.map(v=>v!==null?`<td style="text-align:center">${rcFmt(v)}</td>`:`<td style="text-align:center;color:#94a3b8">—</td>`).join("");
+    return`<tr><td style="font-size:7.5pt">${area}</td>${cells}<td style="text-align:center;font-weight:700">${rcFmt(avg)}</td><td style="text-align:center;font-weight:700">${rcFmt(total)}</td></tr>`;
+  }).join("");
+
+  const sacTotals=weeks.map(w=>Math.round(sd.filter(r=>r._wk===w).reduce((s,r)=>s+(r["Frequência"]||0),0)));
+  const sacTotal=sacTotals.reduce((a,b)=>a+b,0);
+  const sacAvg=sacTotals.filter(v=>v>0).length?Math.round(sacTotals.filter(v=>v>0).reduce((a,b)=>a+b,0)/sacTotals.filter(v=>v>0).length):0;
+
+  return`<div class="rpt-page">
+    <div class="rpt-page-header">
+      <span class="rpt-stake-badge">${stake.toUpperCase()}</span>
+    </div>
+    <div class="rpt-section-title">📊 Indicadores Semanais — ${stake}</div>
+    <table class="rpt-table" style="margin-bottom:10px">
+      <thead><tr><th>Indicador</th>${wkLbls.map(l=>`<th style="text-align:center">${l}</th>`).join("")}<th style="text-align:center">Total</th></tr></thead>
+      <tbody>${wkRows}</tbody>
+    </table>
+    ${sacRows?`<div class="rpt-section-title">🏠 Frequência Sacramental por Área</div>
+    <table class="rpt-table">
+      <thead><tr><th>Área</th>${wkLbls.map(l=>`<th style="text-align:center">${l}</th>`).join("")}<th style="text-align:center">Média</th><th style="text-align:center">Total</th></tr></thead>
+      <tbody>${sacRows}</tbody>
+      <tfoot><tr><td><strong>TOTAL</strong></td>${sacTotals.map(v=>`<td style="text-align:center"><strong>${rcFmt(v)}</strong></td>`).join("")}<td style="text-align:center"><strong>${rcFmt(sacAvg)}</strong></td><td style="text-align:center"><strong>${rcFmt(sacTotal)}</strong></td></tr></tfoot>
+    </table>`:""}
+  </div>`;
+}
+
+function rcBaptismPage(fd, periodLabel){
+  const IGNORE=new Set(["","0","n/a","na","nenhum","none","-","n"]);
+  const names=[];
+  fd.forEach(r=>{
+    const raw=r["Nome Batizados"]||"";
+    if(!raw||IGNORE.has(raw.trim().toLowerCase())) return;
+    raw.split(/[\n,;]+/).forEach(n=>{
+      n=n.trim();
+      if(n&&!IGNORE.has(n.toLowerCase())&&n.length>2)
+        names.push({data:r["Data"],estaca:r["Estaca"],area:r["Área de Ensino"],zona:r["Zona"],nome:n});
+    });
+  });
+  const total=Math.round(fd.reduce((s,r)=>s+getNum(r,"Batismos"),0));
+  const rows=names.map((b,i)=>`<tr><td>${i+1}</td><td style="font-weight:600">${b.nome}</td><td>${b.data}</td><td>${b.estaca}</td><td>${b.area}</td><td>${b.zona}</td></tr>`).join("");
+  return`<div class="rpt-page">
+    <div class="rpt-page-header"><span class="rpt-mission-badge">MISSÃO BRASIL CURITIBA</span><span>Batismos · ${periodLabel}</span></div>
+    <div class="rpt-section-title">💧 Batismos no Período — ${total} total · ${names.length} com nome registrado</div>
+    ${names.length?`<table class="rpt-table">
+      <thead><tr><th>#</th><th>Nome</th><th>Data</th><th>Estaca</th><th>Área</th><th>Zona</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`:`<p style="color:#94a3b8;font-size:8pt;padding:8px 0">Nenhum nome registrado no período.</p>`}
+  </div>`;
+}
+
+// ── MAIN GENERATOR ────────────────────────────────────────────────
+async function generateFullReport(){
+  initRCFilters();
+  const zoneFilter=document.getElementById("rc-zona").value||"all";
+  const periodLabel=document.getElementById("caption").querySelector("strong")?.textContent||"—";
+  const today=new Date().toLocaleDateString("pt-BR");
+
+  const prog=document.getElementById("rc-progress");
+  prog.style.display="";
+  prog.textContent="⏳ Gerando relatório…";
+
+  const base=getDateBase();
+  const fd=zoneFilter==="all"?base:base.filter(r=>r["Zona"]===zoneFilter);
+  const zones=zoneFilter==="all"?[...new Set(fd.map(r=>r["Zona"]).filter(Boolean))].sort():[zoneFilter];
+  const stakes=[...new Set(fd.map(r=>r["Estaca"]).filter(Boolean))].sort();
+
+  let pages="";
+  prog.textContent="⏳ Gerando capa e resumo…";
+  pages+=rcCover(periodLabel,today,zoneFilter);
+  pages+=rcMissionSummary(fd,periodLabel);
+  pages+=rcZoneProgress(fd,zones);
+
+  for(const zone of zones){
+    prog.textContent=`⏳ Processando zona ${zone}…`;
+    pages+=rcZonePage(fd,zone);
+    // Stakes in this zone
+    const zoneStakes=[...new Set(fd.filter(r=>r["Zona"]===zone).map(r=>r["Estaca"]).filter(Boolean))].sort();
+    for(const stake of zoneStakes){
+      pages+=rcStakePage(fd,stake);
+    }
+    await new Promise(r=>setTimeout(r,0)); // yield to UI
+  }
+
+  prog.textContent="⏳ Adicionando lista de batismos…";
+  pages+=rcBaptismPage(fd,periodLabel);
+
+  const preview=document.getElementById("rc-preview");
+  preview.style.display="block";
+  preview.innerHTML=pages;
+
+  prog.textContent=`✅ Relatório gerado — ${preview.querySelectorAll(".rpt-page").length} páginas`;
+  document.getElementById("rc-btn-pdf").disabled=false;
+}
+
+// ── PDF EXPORT ────────────────────────────────────────────────────
+function exportFullPDF(){
+  const preview=document.getElementById("rc-preview");
+  if(!preview||preview.style.display==="none"){alert("Gere o relatório primeiro.");return;}
+  const stk=document.getElementById("rc-zona").value||"Missão";
+  const periodLabel=document.getElementById("rc-period-label").textContent||"";
+  const html=`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Relatório Completo — ${stk}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',Arial,sans-serif;font-size:8.5pt;color:#1e293b;background:#fff;line-height:1.4}
+@page{size:A4;margin:1.2cm 1.4cm}
+.rpt-page{page-break-after:always;min-height:calc(297mm - 2.4cm);padding:0 0 8px}
+.rpt-page:last-child{page-break-after:auto}
+/* Cover */
+.rpt-cover{display:flex;align-items:center;justify-content:center;text-align:center;
+           background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%);color:#fff;
+           min-height:250mm;border-radius:0}
+.rpt-cover-inner{padding:40px}
+.rpt-cover-logo{width:60px;height:60px;background:rgba(255,255,255,.15);border-radius:12px;
+                display:flex;align-items:center;justify-content:center;
+                font-size:22pt;font-weight:900;color:#fff;margin:0 auto 16px}
+.rpt-cover-title{font-size:22pt;font-weight:900;color:#fff;letter-spacing:-.5px;margin-bottom:8px}
+.rpt-cover-sub{font-size:13pt;font-weight:600;color:#93c5fd;margin-bottom:12px}
+.rpt-cover-period{font-size:11pt;color:rgba(255,255,255,.75);margin-bottom:6px}
+.rpt-cover-date{font-size:8pt;color:rgba(255,255,255,.4)}
+/* Page layout */
+.rpt-page-header{display:flex;align-items:center;justify-content:space-between;
+                 padding:6px 0;border-bottom:2px solid #0f172a;margin-bottom:10px;font-size:8pt}
+.rpt-mission-badge{background:#0f172a;color:#fff;padding:3px 10px;border-radius:4px;font-weight:700;font-size:7.5pt}
+.rpt-zone-badge{color:#fff;padding:3px 10px;border-radius:4px;font-weight:800;font-size:8pt}
+.rpt-stake-badge{background:#475569;color:#fff;padding:3px 10px;border-radius:4px;font-weight:700;font-size:8pt}
+.rpt-section-title{font-size:8pt;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
+                   color:#0f172a;border-left:3px solid #2563eb;padding-left:7px;margin:8px 0 6px}
+/* KPI grid */
+.rpt-kpi-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:8px}
+.rpt-kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:7px 8px;text-align:center}
+.rpt-kpi-val{font-size:14pt;font-weight:900;color:#0f172a;line-height:1}
+.rpt-kpi-lbl{font-size:6pt;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;margin:2px 0 1px}
+/* Zone progress */
+.rpt-zones-wrap{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.rpt-zone-card{border:1px solid #e2e8f0;border-radius:6px;overflow:hidden}
+.rpt-zone-hdr{padding:5px 10px;font-size:7.5pt;font-weight:800;text-transform:uppercase;letter-spacing:.3px;color:#fff}
+.rpt-zp-grid{display:grid;grid-template-columns:repeat(4,1fr)}
+.rpt-zp-item{padding:5px 7px;border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0}
+.rpt-zp-item:nth-child(4n){border-right:none}
+.rpt-zp-item:nth-last-child(-n+4){border-bottom:none}
+.rpt-zp-lbl{font-size:5.5pt;text-transform:uppercase;color:#94a3b8;margin-bottom:1px}
+.rpt-zp-val{font-size:11pt;font-weight:900;line-height:1}
+.rpt-zp-bar-bg{background:#e2e8f0;height:2px;border-radius:1px;margin:2px 0 1px}
+.rpt-zp-bar{height:2px;border-radius:1px}
+/* Table */
+.rpt-table{width:100%;border-collapse:collapse;font-size:7.5pt;margin-bottom:6px}
+.rpt-table th{background:#0f172a;color:#fff;padding:4px 6px;text-align:left;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
+.rpt-table td{padding:3.5px 6px;border-bottom:1px solid #f1f5f9;color:#1e293b}
+.rpt-table tr:last-child td{border-bottom:none}
+.rpt-table tfoot td{background:#f8fafc;font-weight:700;border-top:2px solid #e2e8f0}
+</style>
+</head>
+<body>${preview.innerHTML}</body>
+</html>`;
+  const win=window.open("","_blank","width=900,height=800");
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(()=>{ try{win.print();}catch(e){} },1500);
 }
 
 /* ══════════════════════════════════════════════════════════════════
