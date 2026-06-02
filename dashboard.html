@@ -2321,7 +2321,7 @@ function rcZonePage(fd,zone){
       <div class="rpt-spark-lbl">${col}</div>
       <div class="rpt-spark-val" style="color:${sparkColors[i]}">${rcFmt(total)}</div>
       ${rcSparkline(vals,180,48,sparkColors[i],true)}
-      <div class="rpt-spark-weeks">${wkLbls.map((l,wi)=>`<span>${vals[wi]}</span>`).join("")}</div>
+      <div class="rpt-spark-weeks">${wkLbls.map(l=>`<span>${l}</span>`).join("")}</div>
     </div>`;
   }).join("");
 
