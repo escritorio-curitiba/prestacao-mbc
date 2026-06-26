@@ -431,6 +431,7 @@ hr{border:none;border-top:1px solid var(--bdr);margin:18px 0}
   <button class="tab" onclick="showTab('prest')">Controle Prestação</button>
   <button class="tab" onclick="showTab('relatorio')">Relatório Estacas</button>
   <button class="tab" onclick="showTab('relatorio-completo')">Relatório Completo</button>
+  <button class="tab" onclick="showTab('ap')">Relatório AP's</button>
 </div>
 
 <!-- ══ TAB: VISÃO GERAL ══════════════════════════════════════════════ -->
@@ -644,6 +645,17 @@ hr{border:none;border-top:1px solid var(--bdr);margin:18px 0}
   </div>
   <div id="rc-progress" style="display:none;margin-bottom:10px;font-size:.82rem;color:#2563eb"></div>
   <div id="rc-preview" style="display:none"></div>
+</div>
+
+<!-- ══ TAB: RELATÓRIO AP's ══════════════════════════════════════════ -->
+<div id="tab-ap" class="tab-content">
+  <div class="rel-actions">
+    <button class="btn-generate" onclick="generateAPReport()">⚙ Gerar Relatório AP's</button>
+    <button class="btn-pdf" id="ap-btn-pdf" onclick="exportAPPDF()" disabled>⬇ Exportar PDF</button>
+    <span style="font-size:.76rem;color:#64748b">Período: <strong id="ap-period-label">—</strong></span>
+  </div>
+  <div id="ap-progress" style="display:none;margin-bottom:10px;font-size:.82rem;color:#2563eb"></div>
+  <div id="ap-preview" style="display:none"></div>
 </div>
 
 <!-- ══ TAB: CONTROLE PRESTAÇÃO ═══════════════════════════════════════ -->
@@ -1000,7 +1012,7 @@ function setPeriodType(t){
 ══════════════════════════════════════════════════════════════════ */
 function showTab(id){
   document.querySelectorAll(".tab").forEach((b,i)=>{
-    b.classList.toggle("active",["geral","tabela","tendencia","batismos","rcm","sac","prest","relatorio","relatorio-completo"][i]===id);
+    b.classList.toggle("active",["geral","tabela","tendencia","batismos","rcm","sac","prest","relatorio","relatorio-completo","ap"][i]===id);
   });
   document.querySelectorAll(".tab-content").forEach(el=>{
     el.classList.toggle("active",el.id==="tab-"+id);
@@ -2164,6 +2176,176 @@ function renderSacramental(){
       });
     },0);
   });
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   RELATÓRIO AP's — 1 zona por página, áreas com cores
+══════════════════════════════════════════════════════════════════ */
+function apCellClass(val,goalForPeriod){
+  if(!goalForPeriod) return{bg:"",color:""};
+  if(val===0) return{bg:"#fef2f2",color:"#991b1b"};
+  const p=val/goalForPeriod*100;
+  if(p>=80) return{bg:"#f0fdf4",color:"#15803d"};
+  if(p>=50) return{bg:"#fefce8",color:"#92400e"};
+  return{bg:"#fef2f2",color:"#991b1b"};
+}
+
+function apBuildAreaTable(zoneData,zone,nw_){
+  const areas=[...new Set(zoneData.map(r=>r["Área de Ensino"]).filter(Boolean))].sort();
+  const rows=areas.map(area=>{
+    const ad=zoneData.filter(r=>r["Área de Ensino"]===area);
+    const vals=TABLE_COLS.map(col=>Math.round(ad.reduce((s,r)=>s+getNum(r,col),0)));
+    return{area,vals};
+  }).sort((a,b)=>b.vals[0]-a.vals[0]); // sort by Batismos desc
+
+  const totals=TABLE_COLS.map((col,ci)=>rows.reduce((s,r)=>s+r.vals[ci],0));
+
+  const hdr=`<tr><th>Área</th>${TABLE_COLS.map(c=>`<th>${ICONS[c]||""} ${c}</th>`).join("")}</tr>`;
+  const body=rows.map(r=>{
+    const cells=TABLE_COLS.map((col,ci)=>{
+      const v=r.vals[ci];
+      const goal=col==="Batismos"?getZoneBaptismGoal(zone,nw_)/Math.max(1,rows.length):(EXCELLENCE[col]||0)*nw_;
+      const{bg,color}=apCellClass(v,goal);
+      return`<td style="background:${bg};color:${color};font-weight:600;text-align:center">${rcFmt(v)}</td>`;
+    }).join("");
+    return`<tr><td style="text-align:left;font-weight:600">${r.area}</td>${cells}</tr>`;
+  }).join("");
+  const footCells=totals.map((v,ci)=>{
+    const col=TABLE_COLS[ci];
+    const goal=col==="Batismos"?getZoneBaptismGoal(zone,nw_):(EXCELLENCE[col]||0)*nw_*rows.length;
+    const{bg,color}=apCellClass(v,goal);
+    return`<td style="background:${bg};color:${color};font-weight:800;text-align:center">${rcFmt(v)}</td>`;
+  }).join("");
+
+  return`<table class="rpt-table">
+    <thead>${hdr}</thead>
+    <tbody>${body}</tbody>
+    <tfoot><tr><td style="text-align:left"><strong>TOTAL</strong></td>${footCells}</tr></tfoot>
+  </table>`;
+}
+
+function apMissionPage(fd,periodLabel,zones){
+  const nw_=nWeeks(fd)||1;
+  const rows=zones.map(zone=>{
+    const zd=fd.filter(r=>r["Zona"]===zone);
+    const vals=TABLE_COLS.map(col=>Math.round(zd.reduce((s,r)=>s+getNum(r,col),0)));
+    return{zone,vals};
+  }).sort((a,b)=>b.vals[0]-a.vals[0]);
+  const totals=TABLE_COLS.map((col,ci)=>rows.reduce((s,r)=>s+r.vals[ci],0));
+
+  const hdr=`<tr><th>Zona</th>${TABLE_COLS.map(c=>`<th>${ICONS[c]||""} ${c}</th>`).join("")}</tr>`;
+  const body=rows.map(r=>{
+    const cells=TABLE_COLS.map((col,ci)=>{
+      const v=r.vals[ci];
+      const goal=col==="Batismos"?getZoneBaptismGoal(r.zone,nw_):(EXCELLENCE[col]||0)*nw_*Math.max(1,nAreas(fd.filter(x=>x["Zona"]===r.zone)));
+      const{bg,color}=apCellClass(v,goal);
+      return`<td style="background:${bg};color:${color};font-weight:700;text-align:center">${rcFmt(v)}</td>`;
+    }).join("");
+    return`<tr><td style="text-align:left;font-weight:700">${r.zone}</td>${cells}</tr>`;
+  }).join("");
+  const footCells=totals.map((v,ci)=>{
+    const col=TABLE_COLS[ci];
+    const goal=col==="Batismos"?getBaptismGoal(fd,nw_):(EXCELLENCE[col]||0)*nw_*Math.max(1,nAreas(fd));
+    const{bg,color}=apCellClass(v,goal);
+    return`<td style="background:${bg};color:${color};font-weight:800;text-align:center">${rcFmt(v)}</td>`;
+  }).join("");
+
+  const kpis=[
+    {col:"Batismos",lbl:"Batismos",goal:getBaptismGoal(fd,nw_)},
+    {col:"Convites",lbl:"Convites Batismais",goal:(EXCELLENCE["Convites"]||0)*nw_*nAreas(fd)},
+    {col:"Igreja",lbl:"Freq. Sacram. Amigos",goal:(EXCELLENCE["Igreja"]||0)*nw_*nAreas(fd)},
+    {col:"Contatos",lbl:"Contatos",goal:(EXCELLENCE["Contatos"]||0)*nw_*nAreas(fd)},
+  ].map(k=>{
+    const val=Math.round(fd.reduce((s,r)=>s+getNum(r,k.col),0));
+    const pct=k.goal?Math.round(val/k.goal*100):0;
+    const c=pct>=80?"#16a34a":pct>=50?"#d97706":"#dc2626";
+    return`<div class="rpt-kpi"><div class="rpt-kpi-val">${rcFmt(val)}</div><div class="rpt-kpi-lbl">${k.lbl}</div>
+      <div style="font-size:7pt;color:${c};font-weight:700">${pct}% da meta</div></div>`;
+  }).join("");
+
+  return`<div class="rpt-page">
+    <div class="rpt-page-header"><span class="rpt-mission-badge">MISSÃO BRASIL CURITIBA</span><span>${periodLabel}</span></div>
+    <div class="rpt-section-title">📊 Total da Missão</div>
+    <div class="rpt-kpi-grid" style="grid-template-columns:repeat(4,1fr)">${kpis}</div>
+    <div class="rpt-section-title" style="margin-top:8px">Resultados por Zona</div>
+    <table class="rpt-table">
+      <thead>${hdr}</thead>
+      <tbody>${body}</tbody>
+      <tfoot><tr><td style="text-align:left"><strong>TOTAL</strong></td>${footCells}</tr></tfoot>
+    </table>
+  </div>`;
+}
+
+function apZonePage(fd,zone,periodLabel){
+  const zd=fd.filter(r=>r["Zona"]===zone);
+  if(!zd.length) return "";
+  const color=APP.zoneColors[zone]||"#2563eb";
+  const nw_=nWeeks(zd)||1;
+  const table=apBuildAreaTable(zd,zone,nw_);
+  return`<div class="rpt-page">
+    <div class="rpt-page-header"><span class="rpt-zone-badge" style="background:${color}">${zone.toUpperCase()}</span><span style="color:#64748b;font-size:7.5pt">${periodLabel}</span></div>
+    <div class="rpt-section-title">Áreas — Zona ${zone}</div>
+    ${table}
+  </div>`;
+}
+
+async function generateAPReport(){
+  const periodLabel=document.getElementById("caption").querySelector("strong")?.textContent||"—";
+  document.getElementById("ap-period-label").textContent=periodLabel;
+  const prog=document.getElementById("ap-progress");
+  prog.style.display="";prog.textContent="⏳ Gerando…";
+
+  const fd=getDateBase();
+  const zones=[...new Set(fd.map(r=>r["Zona"]).filter(Boolean))].sort();
+
+  let pages=apMissionPage(fd,periodLabel,zones);
+  for(const zone of zones){
+    prog.textContent=`⏳ Zona ${zone}…`;
+    pages+=apZonePage(fd,zone,periodLabel);
+    await new Promise(r=>setTimeout(r,0));
+  }
+
+  const preview=document.getElementById("ap-preview");
+  preview.style.display="block";
+  preview.innerHTML=pages;
+  prog.textContent=`✅ Relatório pronto — ${preview.querySelectorAll(".rpt-page").length} páginas`;
+  document.getElementById("ap-btn-pdf").disabled=false;
+}
+
+function exportAPPDF(){
+  const preview=document.getElementById("ap-preview");
+  if(!preview||preview.style.display==="none"){alert("Gere o relatório primeiro.");return;}
+  const html=`<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Relatório AP's — Missão Brasil Curitiba</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+body{font-family:'Inter',Arial,sans-serif;font-size:8.5pt;color:#1e293b;background:#fff;line-height:1.4}
+@page{size:A4 landscape;margin:1.2cm 1.4cm}
+.rpt-page{page-break-after:always;padding-bottom:6px}
+.rpt-page:last-child{page-break-after:auto}
+.rpt-page-header{display:flex;align-items:center;justify-content:space-between;
+                 padding:6px 0;border-bottom:2px solid #0f172a;margin-bottom:10px;font-size:8pt}
+.rpt-mission-badge{background:#0f172a!important;color:#fff!important;padding:4px 12px;border-radius:5px;font-weight:700;font-size:8pt}
+.rpt-zone-badge{color:#fff!important;padding:4px 12px;border-radius:5px;font-weight:800;font-size:9pt}
+.rpt-section-title{font-size:8.5pt;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
+                   color:#0f172a;border-left:3px solid #2563eb;padding-left:8px;margin:8px 0 8px}
+.rpt-kpi-grid{display:grid;gap:8px;margin-bottom:10px}
+.rpt-kpi{background:#f8fafc!important;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;text-align:center}
+.rpt-kpi-val{font-size:18pt;font-weight:900;color:#0f172a;line-height:1}
+.rpt-kpi-lbl{font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;margin:3px 0 2px}
+.rpt-table{width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:6px}
+.rpt-table th{background:#0f172a!important;color:#fff!important;padding:7px 8px;text-align:center;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
+.rpt-table th:first-child{text-align:left}
+.rpt-table td{padding:6px 8px;border-bottom:1px solid #f1f5f9}
+.rpt-table tr:last-child td{border-bottom:none}
+.rpt-table tfoot td{border-top:2px solid #0f172a}
+</style></head>
+<body>${preview.innerHTML}</body></html>`;
+  const win=window.open("","_blank","width=1100,height=800");
+  win.document.write(html);win.document.close();win.focus();
+  setTimeout(()=>{try{win.print();}catch(e){}},1200);
 }
 
 /* ══════════════════════════════════════════════════════════════════
