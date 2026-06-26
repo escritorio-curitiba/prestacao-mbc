@@ -514,6 +514,10 @@ hr{border:none;border-top:1px solid var(--bdr);margin:18px 0}
   <!-- Period total KPI -->
   <div id="bat-period-kpi" style="margin-bottom:14px"></div>
 
+  <!-- Ranking de áreas -->
+  <div class="section-title">🏆 Ranking de Áreas por Batismos</div>
+  <div id="bat-ranking" style="margin-bottom:14px"></div>
+
   <!-- Mini-cards per zone -->
   <div class="section-title" id="bat-cards-title">Batismos por Zona</div>
   <div id="bat-zone-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px"></div>
@@ -1416,6 +1420,44 @@ function renderBaptisms(){
         <span style="font-size:.75rem;color:#94a3b8;margin-left:10px">meta ${fmt(batGoalPeriod)} batismos/mês</span>
       </div>`:""}
     </div>`;
+
+  // ── Ranking de Áreas por Batismos (+ alerta de áreas sem atividade) ──
+  const rankAreas=[...new Set(fd.map(r=>r["Área de Ensino"]).filter(Boolean))].sort();
+  const rankRows=rankAreas.map(area=>{
+    const ad=fd.filter(r=>r["Área de Ensino"]===area);
+    const bat=Math.round(ad.reduce((s,r)=>s+getNum(r,"Batismos"),0));
+    const conv=Math.round(ad.reduce((s,r)=>s+getNum(r,"Convites"),0));
+    const igr=Math.round(ad.reduce((s,r)=>s+getNum(r,"Igreja"),0));
+    const rcs=Math.round(ad.reduce((s,r)=>s+getNum(r,"Igreja RCs"),0));
+    const nov=Math.round(ad.reduce((s,r)=>s+getNum(r,"Novos"),0));
+    const noActivity=conv===0&&igr===0&&rcs===0&&nov===0;
+    return{area,zona:ad[0]?.["Zona"]||"",estaca:ad[0]?.["Estaca"]||"",bat,conv,igr,rcs,nov,noActivity};
+  }).sort((a,b)=>b.bat-a.bat||a.area.localeCompare(b.area));
+
+  const inactiveCount=rankRows.filter(r=>r.noActivity).length;
+  const rankHtml=`
+    ${inactiveCount?`<div class="alert alert-r" style="margin-bottom:10px">
+      <div class="alert-badge" style="color:#dc2626">⚠ Atenção</div>
+      <div class="alert-name">${inactiveCount} área(s) sem atividade no período (0 Convites, 0 Igreja, 0 Igreja RCs e 0 Novos)</div>
+    </div>`:""}
+    <div class="tbl-wrap"><table class="dtbl">
+      <thead><tr>
+        <th style="text-align:left">#</th><th style="text-align:left">Área</th><th style="text-align:left">Zona</th>
+        <th>💧 Batismos</th><th>📣 Convites</th><th>🏠 Igreja</th><th>⭐ Igreja RCs</th><th>🌱 Novos</th><th>Status</th>
+      </tr></thead>
+      <tbody>${rankRows.map((r,i)=>`<tr${r.noActivity?' style="background:#fef2f2"':""}>
+        <td style="text-align:left;color:#94a3b8">${i+1}</td>
+        <td style="text-align:left;font-weight:600">${r.area}</td>
+        <td style="text-align:left;color:#64748b;font-size:.78rem">${r.zona}</td>
+        <td style="font-weight:700;color:${r.bat>0?'#2563eb':'#94a3b8'}">${r.bat}</td>
+        <td style="color:${r.conv===0?'#dc2626':'#1e293b'}">${r.conv}</td>
+        <td style="color:${r.igr===0?'#dc2626':'#1e293b'}">${r.igr}</td>
+        <td style="color:${r.rcs===0?'#dc2626':'#1e293b'}">${r.rcs}</td>
+        <td style="color:${r.nov===0?'#dc2626':'#1e293b'}">${r.nov}</td>
+        <td>${r.noActivity?'<span style="color:'+'#dc2626'+';font-weight:700;font-size:.75rem">🔴 Inativa</span>':'<span style="color:'+'#16a34a'+';font-weight:700;font-size:.75rem">✓ Ativa</span>'}</td>
+      </tr>`).join("")}</tbody>
+    </table></div>`;
+  document.getElementById("bat-ranking").innerHTML=rankHtml;
 
   // ── Trend line chart ─────────────────────────────────────────────
   // Use broader history (last 12 months) for the trend
